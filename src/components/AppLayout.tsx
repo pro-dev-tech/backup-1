@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, ShieldAlert, Bot, Plug, FileBarChart,
   Settings, Bell, ChevronDown, Shield, Lock, ClipboardList,
-  Menu, X, LogOut
+  Menu, X, LogOut, Sun, Moon
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "@/components/ThemeProvider";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -20,15 +22,42 @@ const navItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { theme, toggleTheme } = useTheme();
+  const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  // Close sidebar on mobile when route changes
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [location.pathname, isMobile]);
+
+  // Sync sidebar state when breakpoint changes
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {isMobile && sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-sidebar transition-all duration-300 ${
-          sidebarOpen ? "w-64" : "w-16"
+          isMobile
+            ? sidebarOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full"
+            : sidebarOpen ? "w-64" : "w-16"
         }`}
       >
         {/* Logo */}
@@ -36,7 +65,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg gradient-primary">
             <Shield className="h-4 w-4 text-primary-foreground" />
           </div>
-          {sidebarOpen && (
+          {(sidebarOpen || isMobile) && (
             <motion.span
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -44,6 +73,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               ComplianceAI
             </motion.span>
+          )}
+          {isMobile && sidebarOpen && (
+            <button onClick={() => setSidebarOpen(false)} className="ml-auto p-1 text-muted-foreground hover:text-foreground">
+              <X className="h-5 w-5" />
+            </button>
           )}
         </div>
 
@@ -62,14 +96,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <item.icon className={`h-5 w-5 shrink-0 ${active ? "text-primary" : ""}`} />
-                {sidebarOpen && <span className="whitespace-nowrap">{item.title}</span>}
+                {(sidebarOpen || isMobile) && <span className="whitespace-nowrap">{item.title}</span>}
               </Link>
             );
           })}
         </nav>
 
         {/* Security badges */}
-        {sidebarOpen && (
+        {(sidebarOpen || isMobile) && (
           <div className="border-t border-border p-3 space-y-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Lock className="h-3.5 w-3.5 text-success" />
@@ -84,31 +118,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main area */}
-      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-16"}`}>
+      <div className={`flex-1 transition-all duration-300 ${
+        isMobile ? "ml-0" : sidebarOpen ? "ml-64" : "ml-16"
+      }`}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-xl px-6">
-          <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-xl px-4 md:px-6">
+          <div className="flex items-center gap-2 md:gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors"
             >
-              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {sidebarOpen && !isMobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
 
-            {/* Company selector */}
-            <button className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+            {/* Company selector - hidden on very small screens */}
+            <button className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors">
               <div className="h-5 w-5 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">A</div>
               <span>Acme Pvt Ltd</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Risk score badge */}
-            <div className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Risk score badge - compact on mobile */}
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
               <Shield className="h-3.5 w-3.5" />
               Risk Score: 82/100
             </div>
+
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className="rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
 
             {/* Notifications */}
             <button className="relative rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors">
@@ -127,12 +172,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="h-8 w-8 rounded-full gradient-primary flex items-center justify-center text-sm font-bold text-primary-foreground">
                   RA
                 </div>
-                {sidebarOpen && (
-                  <div className="text-left hidden md:block">
-                    <p className="text-sm font-medium text-foreground">Rahul A.</p>
-                    <p className="text-xs text-muted-foreground">Admin</p>
-                  </div>
-                )}
+                <div className="text-left hidden lg:block">
+                  <p className="text-sm font-medium text-foreground">Rahul A.</p>
+                  <p className="text-xs text-muted-foreground">Admin</p>
+                </div>
               </button>
               <AnimatePresence>
                 {profileOpen && (
@@ -162,7 +205,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-4 md:p-6">
           {children}
         </main>
       </div>
