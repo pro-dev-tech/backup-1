@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, ShieldAlert, Bot, Plug, FileBarChart,
   Settings, Bell, ChevronDown, Shield, Lock, ClipboardList,
-  Menu, X, LogOut, Sun, Moon
+  Menu, X, LogOut, Sun, Moon, Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/ThemeProvider";
@@ -19,6 +19,20 @@ const navItems = [
   { title: "Settings", icon: Settings, path: "/settings" },
 ];
 
+const companies = [
+  { name: "Acme Pvt Ltd", initial: "A" },
+  { name: "TechVision India", initial: "T" },
+  { name: "GreenLeaf Exports", initial: "G" },
+];
+
+const demoNotifications = [
+  { id: 1, text: "PF Return overdue by 2 days", time: "10 min ago", read: false },
+  { id: 2, text: "New GST amendment notification", time: "1h ago", read: false },
+  { id: 3, text: "ESIC threshold change for Karnataka", time: "3h ago", read: false },
+  { id: 4, text: "GST-1 filed successfully", time: "5h ago", read: true },
+  { id: 5, text: "Risk score improved to 82", time: "1d ago", read: true },
+];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -26,13 +40,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState(companies[0]);
+  const [notifications, setNotifications] = useState(demoNotifications);
 
-  // Close sidebar on mobile when route changes
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const markRead = (id: number) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const close = () => { setProfileOpen(false); setNotifOpen(false); setCompanyOpen(false); };
+    if (profileOpen || notifOpen || companyOpen) {
+      const timer = setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [profileOpen, notifOpen, companyOpen]);
+
   useEffect(() => {
     if (isMobile) setSidebarOpen(false);
   }, [location.pathname, isMobile]);
 
-  // Sync sidebar state when breakpoint changes
   useEffect(() => {
     setSidebarOpen(!isMobile);
   }, [isMobile]);
@@ -66,11 +101,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Shield className="h-4 w-4 text-primary-foreground" />
           </div>
           {(sidebarOpen || isMobile) && (
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-lg font-bold gradient-primary-text whitespace-nowrap"
-            >
+            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg font-bold gradient-primary-text whitespace-nowrap">
               ComplianceAI
             </motion.span>
           )}
@@ -131,42 +162,108 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {sidebarOpen && !isMobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
 
-            {/* Company selector - hidden on very small screens */}
-            <button className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors">
-              <div className="h-5 w-5 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">A</div>
-              <span>Acme Pvt Ltd</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            </button>
+            {/* Company selector */}
+            <div className="relative hidden sm:block">
+              <button
+                onClick={(e) => { e.stopPropagation(); setCompanyOpen(!companyOpen); }}
+                className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                <div className="h-5 w-5 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">{selectedCompany.initial}</div>
+                <span>{selectedCompany.name}</span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${companyOpen ? "rotate-180" : ""}`} />
+              </button>
+              <AnimatePresence>
+                {companyOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute left-0 top-10 w-56 rounded-xl border border-border bg-card p-1 shadow-xl z-50"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {companies.map(c => (
+                      <button
+                        key={c.name}
+                        onClick={() => { setSelectedCompany(c); setCompanyOpen(false); }}
+                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${selectedCompany.name === c.name ? "bg-primary/10 text-primary" : "text-foreground hover:bg-secondary"}`}
+                      >
+                        <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">{c.initial}</div>
+                        <span>{c.name}</span>
+                        {selectedCompany.name === c.name && <Check className="h-4 w-4 ml-auto" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            {/* Risk score badge - compact on mobile */}
+            {/* Risk score badge */}
             <div className="hidden sm:flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
               <Shield className="h-3.5 w-3.5" />
               Risk Score: 82/100
             </div>
 
             {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors"
-              aria-label="Toggle theme"
-            >
+            <button onClick={toggleTheme} className="rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors" aria-label="Toggle theme">
               {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
 
             {/* Notifications */}
-            <button className="relative rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground flex items-center justify-center">
-                3
-              </span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setNotifOpen(!notifOpen); }}
+                className="relative rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <AnimatePresence>
+                {notifOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute right-0 top-12 w-80 rounded-xl border border-border bg-card shadow-xl z-50"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between p-3 border-b border-border">
+                      <span className="text-sm font-semibold text-foreground">Notifications</span>
+                      {unreadCount > 0 && (
+                        <button onClick={markAllRead} className="text-xs text-primary hover:underline">Mark all read</button>
+                      )}
+                    </div>
+                    <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                      {notifications.map(n => (
+                        <button
+                          key={n.id}
+                          onClick={() => markRead(n.id)}
+                          className={`w-full text-left px-3 py-3 hover:bg-secondary/50 transition-colors ${!n.read ? "bg-primary/5" : ""}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {!n.read && <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                            <div className={!n.read ? "" : "ml-4"}>
+                              <p className="text-sm text-foreground">{n.text}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Profile */}
             <div className="relative">
               <button
-                onClick={() => setProfileOpen(!profileOpen)}
+                onClick={(e) => { e.stopPropagation(); setProfileOpen(!profileOpen); }}
                 className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-secondary transition-colors"
               >
                 <div className="h-8 w-8 rounded-full gradient-primary flex items-center justify-center text-sm font-bold text-primary-foreground">
@@ -183,7 +280,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -5 }}
-                    className="absolute right-0 top-12 w-48 rounded-xl border border-border bg-card p-2 shadow-xl"
+                    className="absolute right-0 top-12 w-48 rounded-xl border border-border bg-card p-2 shadow-xl z-50"
+                    onClick={e => e.stopPropagation()}
                   >
                     <button
                       onClick={() => { setProfileOpen(false); navigate("/settings"); }}
