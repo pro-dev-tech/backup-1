@@ -34,6 +34,12 @@ const chartTooltipStyle = {
     fontSize: "12px",
     color: "hsl(210 20% 92%)",
   },
+  itemStyle: {
+    color: "hsl(210 20% 92%)",
+  },
+  labelStyle: {
+    color: "hsl(210 20% 92%)",
+  },
 };
 
 export function RiskTrendChart() {
@@ -59,7 +65,14 @@ export function FilingStatusChart() {
       <h3 className="text-sm font-semibold text-foreground mb-4">Filing Status Distribution</h3>
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
-          <Pie data={filingStatus} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="value">
+          <Pie data={filingStatus} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="value"
+            label={({ name, value, x, y, textAnchor }) => (
+              <text x={x} y={y} textAnchor={textAnchor} fill="hsl(210 20% 82%)" fontSize={11}>
+                {`${name}: ${value}`}
+              </text>
+            )}
+            labelLine={{ stroke: "hsl(215 15% 55%)" }}
+          >
             {filingStatus.map((entry, i) => (
               <Cell key={i} fill={entry.color} />
             ))}
