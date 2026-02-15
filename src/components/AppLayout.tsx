@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, ShieldAlert, Bot, Plug, FileBarChart,
-  Settings, Bell, ChevronDown, Shield, Lock, ClipboardList,
+  Settings, Bell, ChevronDown, Shield, Lock, ClipboardList, Newspaper,
   Menu, X, LogOut, Sun, Moon, Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { title: "Compliance Checker", icon: ClipboardList, path: "/compliance-checker" },
+  { title: "News Feed", icon: Newspaper, path: "/news-feed" },
   { title: "Compliance Calendar", icon: Calendar, path: "/calendar" },
   { title: "Risk Monitor", icon: ShieldAlert, path: "/risk-monitor" },
   { title: "AI Assistant", icon: Bot, path: "/ai-assistant" },
