@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import ComplianceScore from "@/components/ComplianceScore";
 import { RiskTrendChart, FilingStatusChart, StateComplianceChart, MonthlyActivityChart } from "@/components/DashboardCharts";
 import { DeadlineCards, RiskAlerts, ActivityTimeline, NewsFeed } from "@/components/DashboardWidgets";
-import { Users, FileText, ShieldCheck, AlertTriangle, ClipboardList, ArrowRight } from "lucide-react";
+import { Users, FileText, ShieldCheck, AlertTriangle, ClipboardList, ArrowRight, Newspaper } from "lucide-react";
 
 const stats = [
   { label: "Total Compliances", value: "59", icon: FileText, change: "+3 this month" },
@@ -79,6 +79,20 @@ export default function Dashboard() {
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ActivityTimeline />
         <NewsFeed />
+      </motion.div>
+
+      {/* News Feed CTA */}
+      <motion.div variants={item}>
+        <Link to="/news-feed" className="glass-card-hover p-5 flex items-center gap-4 group block">
+          <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center shrink-0">
+            <Newspaper className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-foreground">Regulatory News Feed</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Enable live regulatory updates — GST amendments, MCA notifications, labour law changes & more</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+        </Link>
       </motion.div>
     </motion.div>
   );
