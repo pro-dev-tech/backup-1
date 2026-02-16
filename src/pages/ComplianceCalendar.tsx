@@ -99,7 +99,7 @@ export default function ComplianceCalendar() {
     setEvents(prev => [...prev, newEvent]);
     setShowAddModal(false);
     setNewTitle("");
-    toast({ title: "Event added", description: `"${newEvent.title}" on ${MONTH_NAMES[month]} ${selectedDay}, ${year}` });
+    toast({ title: "Event added", description: `"${newEvent.title}" on ${MONTH_NAMES[month]} ${selectedDay}, ${year}`, variant: "success" });
   };
 
   const handleDeleteEvent = (eventIndex: number) => {
@@ -111,7 +111,7 @@ export default function ComplianceCalendar() {
     });
     if (globalIndex !== -1) {
       setEvents(prev => prev.filter((_, i) => i !== globalIndex));
-      toast({ title: "Event removed" });
+      toast({ title: "Event removed", variant: "destructive" });
     }
   };
 

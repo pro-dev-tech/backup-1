@@ -26,7 +26,7 @@ export default function SettingsPage() {
   const [twoFA, setTwoFA] = useState(false);
 
   const handleSave = (section: string) => {
-    toast({ title: "Settings saved", description: `${section} settings updated successfully.` });
+    toast({ title: "Settings saved", description: `${section} settings updated successfully.`, variant: "success" });
   };
 
   const toggle = (id: string) => setActiveSection(activeSection === id ? null : id);
@@ -138,7 +138,7 @@ export default function SettingsPage() {
                   checked={twoFA}
                   onCheckedChange={(checked) => {
                     setTwoFA(checked);
-                    toast({ title: checked ? "2FA Enabled" : "2FA Disabled", description: checked ? "Two-factor authentication is now active." : "Two-factor authentication has been disabled." });
+                    toast({ title: checked ? "2FA Enabled" : "2FA Disabled", description: checked ? "Two-factor authentication is now active." : "Two-factor authentication has been disabled.", variant: "warning" });
                   }}
                 />
               </div>
@@ -181,7 +181,7 @@ export default function SettingsPage() {
                     style={{ background: `hsl(${preset.hsl})` }}
                     onClick={() => {
                       setAccentColor(preset.hsl);
-                      toast({ title: "Accent color changed", description: `${preset.label} accent applied.` });
+                      toast({ title: "Accent color changed", description: `${preset.label} accent applied.`, variant: "success" });
                     }}
                   />
                 ))}
