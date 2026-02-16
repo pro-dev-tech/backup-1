@@ -38,7 +38,7 @@ export default function Reports() {
       };
       setReports(prev => [newReport, ...prev]);
       setGenerating(false);
-      toast({ title: "Report generated", description: `${newReport.name} (${newReport.type}) is ready for download.` });
+      toast({ title: "Report generated", description: `${newReport.name} (${newReport.type}) is ready for download.`, variant: "success" });
     }, 2000);
   };
 
@@ -46,7 +46,7 @@ export default function Reports() {
     setDownloading(index);
     setTimeout(() => {
       setDownloading(null);
-      toast({ title: "Download started", description: `${report.name}.${report.type.toLowerCase()} is downloading.` });
+      toast({ title: "Download started", description: `${report.name}.${report.type.toLowerCase()} is downloading.`, variant: "warning" });
     }, 1000);
   };
 

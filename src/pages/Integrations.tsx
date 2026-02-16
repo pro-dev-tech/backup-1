@@ -26,13 +26,13 @@ export default function Integrations() {
     const int = integrations.find(i => i.name === name)!;
     if (int.connected) {
       setIntegrations(prev => prev.map(i => i.name === name ? { ...i, connected: false, lastSync: "—" } : i));
-      toast({ title: `${name} disconnected`, description: `${name} integration has been disconnected.` });
+      toast({ title: `${name} disconnected`, description: `${name} integration has been disconnected.`, variant: "destructive" });
     } else {
       setConnecting(name);
       setTimeout(() => {
         setIntegrations(prev => prev.map(i => i.name === name ? { ...i, connected: true, lastSync: "Just now" } : i));
         setConnecting(null);
-        toast({ title: `${name} connected`, description: `${name} integration is now active.` });
+        toast({ title: `${name} connected`, description: `${name} integration is now active.`, variant: "success" });
       }, 1500);
     }
   };
@@ -42,7 +42,7 @@ export default function Integrations() {
     setTimeout(() => {
       setIntegrations(prev => prev.map(i => i.name === name ? { ...i, lastSync: "Just now" } : i));
       setSyncing(null);
-      toast({ title: "Sync complete", description: `${name} data has been synced successfully.` });
+      toast({ title: "Sync complete", description: `${name} data has been synced successfully.`, variant: "success" });
     }, 2000);
   };
 
