@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -13,28 +14,24 @@ interface CalEvent {
   status: "completed" | "upcoming" | "overdue";
 }
 
-const allEvents: CalEvent[] = [
-  // Jan 2026
+const defaultEvents: CalEvent[] = [
   { day: 7, month: 0, year: 2026, title: "TDS Payment", status: "completed" },
   { day: 10, month: 0, year: 2026, title: "GST-1 Filing", status: "completed" },
   { day: 15, month: 0, year: 2026, title: "PF Return", status: "completed" },
   { day: 20, month: 0, year: 2026, title: "GST-3B Filing", status: "completed" },
   { day: 25, month: 0, year: 2026, title: "ESI Return", status: "completed" },
-  // Feb 2026
   { day: 7, month: 1, year: 2026, title: "TDS Payment", status: "completed" },
   { day: 10, month: 1, year: 2026, title: "GST-1 Filing", status: "completed" },
   { day: 15, month: 1, year: 2026, title: "PF Return", status: "overdue" },
   { day: 20, month: 1, year: 2026, title: "GST-3B Filing", status: "upcoming" },
   { day: 25, month: 1, year: 2026, title: "ESI Return", status: "upcoming" },
   { day: 28, month: 1, year: 2026, title: "Professional Tax", status: "upcoming" },
-  // Mar 2026
   { day: 7, month: 2, year: 2026, title: "TDS Payment", status: "upcoming" },
   { day: 10, month: 2, year: 2026, title: "GST-1 Filing", status: "upcoming" },
   { day: 15, month: 2, year: 2026, title: "PF Return", status: "upcoming" },
   { day: 20, month: 2, year: 2026, title: "GST-3B Filing", status: "upcoming" },
   { day: 25, month: 2, year: 2026, title: "ESI Return", status: "upcoming" },
   { day: 31, month: 2, year: 2026, title: "TDS Return Q3", status: "upcoming" },
-  // Apr 2026
   { day: 1, month: 3, year: 2026, title: "Annual Return Filing", status: "upcoming" },
   { day: 7, month: 3, year: 2026, title: "TDS Payment", status: "upcoming" },
   { day: 15, month: 3, year: 2026, title: "Advance Tax Q4", status: "upcoming" },
@@ -49,8 +46,14 @@ const statusColors = {
 };
 
 export default function ComplianceCalendar() {
-  const [month, setMonth] = useState(1); // Feb
+  const [month, setMonth] = useState(1);
   const [year, setYear] = useState(2026);
+  const [events, setEvents] = useState<CalEvent[]>(defaultEvents);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [newStatus, setNewStatus] = useState<CalEvent["status"]>("upcoming");
+  const { toast } = useToast();
   const today = new Date();
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -59,8 +62,8 @@ export default function ComplianceCalendar() {
   const blanks = Array.from({ length: firstDay }, (_, i) => i);
 
   const monthEvents = useMemo(() =>
-    allEvents.filter((e) => e.month === month && e.year === year),
-    [month, year]
+    events.filter((e) => e.month === month && e.year === year),
+    [month, year, events]
   );
 
   const getEvents = (day: number) => monthEvents.filter((e) => e.day === day);
@@ -77,11 +80,54 @@ export default function ComplianceCalendar() {
   const isToday = (day: number) =>
     day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
+  const openAddModal = (day?: number) => {
+    setSelectedDay(day ?? 1);
+    setNewTitle("");
+    setNewStatus("upcoming");
+    setShowAddModal(true);
+  };
+
+  const handleAddEvent = () => {
+    if (!newTitle.trim() || selectedDay === null) return;
+    const newEvent: CalEvent = {
+      day: selectedDay,
+      month,
+      year,
+      title: newTitle.trim(),
+      status: newStatus,
+    };
+    setEvents(prev => [...prev, newEvent]);
+    setShowAddModal(false);
+    setNewTitle("");
+    toast({ title: "Event added", description: `"${newEvent.title}" on ${MONTH_NAMES[month]} ${selectedDay}, ${year}` });
+  };
+
+  const handleDeleteEvent = (eventIndex: number) => {
+    const globalIndex = events.findIndex((e, i) => {
+      const matchingEvents = events.filter(
+        (ev, idx) => ev.month === month && ev.year === year && idx <= i
+      );
+      return e.month === month && e.year === year && matchingEvents.length - 1 === eventIndex;
+    });
+    if (globalIndex !== -1) {
+      setEvents(prev => prev.filter((_, i) => i !== globalIndex));
+      toast({ title: "Event removed" });
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Compliance Calendar</h1>
-        <p className="text-sm text-muted-foreground mt-1">Auto-generated deadlines based on your company profile</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Compliance Calendar</h1>
+          <p className="text-sm text-muted-foreground mt-1">Auto-generated deadlines based on your company profile</p>
+        </div>
+        <button
+          onClick={() => openAddModal()}
+          className="flex items-center gap-2 rounded-lg gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          <Plus className="h-4 w-4" /> Add Event
+        </button>
       </div>
 
       {/* Legend */}
@@ -123,11 +169,15 @@ export default function ComplianceCalendar() {
             return (
               <div
                 key={day}
-                className={`aspect-square rounded-lg p-1.5 text-sm transition-colors cursor-pointer hover:bg-secondary/80 ${
+                onClick={() => openAddModal(day)}
+                className={`aspect-square rounded-lg p-1.5 text-sm transition-colors cursor-pointer hover:bg-secondary/80 group ${
                   todayFlag ? "border border-primary bg-primary/10" : "bg-secondary/30"
                 }`}
               >
-                <span className={`text-xs font-medium ${todayFlag ? "text-primary" : "text-foreground"}`}>{day}</span>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-medium ${todayFlag ? "text-primary" : "text-foreground"}`}>{day}</span>
+                  <Plus className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
                 <div className="mt-0.5 space-y-0.5">
                   {dayEvents.map((ev, i) => (
                     <div
@@ -164,14 +214,112 @@ export default function ComplianceCalendar() {
                     <p className="text-xs text-muted-foreground">{MONTH_NAMES[month]} {ev.day}, {year}</p>
                   </div>
                 </div>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
-                  ev.status === "completed" ? "status-green" : ev.status === "overdue" ? "status-red" : "status-yellow"
-                }`}>{ev.status}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                    ev.status === "completed" ? "status-green" : ev.status === "overdue" ? "status-red" : "status-yellow"
+                  }`}>{ev.status}</span>
+                  <button
+                    onClick={() => handleDeleteEvent(i)}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Remove event"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Add Event Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm"
+            onClick={() => setShowAddModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card w-full max-w-md mx-4 p-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-semibold text-foreground">Add Event</h3>
+                <button onClick={() => setShowAddModal(false)} className="rounded-lg p-1 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Event Title</label>
+                  <input
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    placeholder="e.g. GST Filing, PF Return..."
+                    className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    autoFocus
+                    onKeyDown={e => e.key === "Enter" && handleAddEvent()}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
+                  <div className="flex gap-3">
+                    <select
+                      value={selectedDay ?? 1}
+                      onChange={e => setSelectedDay(Number(e.target.value))}
+                      className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      {days.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    <div className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-muted-foreground">
+                      {MONTH_NAMES[month]} {year}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
+                  <div className="flex gap-2">
+                    {(["upcoming", "completed", "overdue"] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setNewStatus(s)}
+                        className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                          newStatus === s
+                            ? s === "completed" ? "bg-success/20 text-success border border-success/30"
+                            : s === "overdue" ? "bg-destructive/20 text-destructive border border-destructive/30"
+                            : "bg-warning/20 text-warning border border-warning/30"
+                            : "border border-border text-muted-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleAddEvent}
+                  disabled={!newTitle.trim()}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus className="h-4 w-4" /> Add to Calendar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
