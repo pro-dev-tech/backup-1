@@ -175,6 +175,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <span>{company.name}</span>
                 <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${companyOpen ? "rotate-180" : ""}`} />
               </button>
+              <AnimatePresence>
+                {companyOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute left-0 top-10 w-56 rounded-xl border border-border bg-card p-1 shadow-xl z-50"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="px-3 py-2 text-xs text-muted-foreground font-medium">Current Company</div>
+                    <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm bg-primary/10 text-primary">
+                      <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">{companyInitial}</div>
+                      <span>{company.name}</span>
+                      <Check className="h-4 w-4 ml-auto" />
+                    </div>
+                    <div className="border-t border-border mt-1 pt-1">
+                      <button
+                        onClick={() => { setCompanyOpen(false); navigate("/settings"); }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
+                      >
+                        <Settings className="h-4 w-4 text-muted-foreground" />
+                        <span>Edit Company Details</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
