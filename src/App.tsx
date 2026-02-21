@@ -22,6 +22,7 @@ import RegulatoryNewsFeed from "@/pages/RegulatoryNewsFeed";
 import NotFound from "@/pages/NotFound";
 import Terms from "@/pages/Terms";
 import Privacy from "@/pages/Privacy";
+import LandingPage from "@/pages/LandingPage";
 
 const queryClient = new QueryClient();
 
@@ -39,7 +40,7 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
