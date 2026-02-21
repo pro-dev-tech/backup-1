@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navItems = [
@@ -37,6 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { profile, company } = useSettings();
+  const { user, role, logout, isAuthenticated } = useAuth();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -44,9 +46,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [notifications, setNotifications] = useState(demoNotifications);
 
+  useEffect(() => {
+    if (!isAuthenticated) navigate("/login", { replace: true });
+  }, [isAuthenticated, navigate]);
+
   const companyInitial = company.name.charAt(0).toUpperCase();
-  const profileInitials = `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`;
-  const profileDisplayName = `${profile.firstName} ${profile.lastName.charAt(0)}.`;
+  const displayName = user ? `${user.firstName} ${user.lastName.charAt(0)}.` : `${profile.firstName} ${profile.lastName.charAt(0)}.`;
+  const displayInitials = user ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}` : `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`;
+  const roleLabel = role === "admin" ? "Admin" : role === "finance" ? "Finance" : "Auditor";
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -274,11 +281,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-secondary transition-colors"
               >
                 <div className="h-8 w-8 rounded-full gradient-primary flex items-center justify-center text-sm font-bold text-primary-foreground">
-                  {profileInitials}
+                  {displayInitials}
                 </div>
                 <div className="text-left hidden lg:block">
-                  <p className="text-sm font-medium text-foreground">{profileDisplayName}</p>
-                  <p className="text-xs text-muted-foreground">Admin</p>
+                  <p className="text-sm font-medium text-foreground">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{roleLabel}</p>
                 </div>
               </button>
               <AnimatePresence>
@@ -297,7 +304,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       <Settings className="h-4 w-4" /> Settings
                     </button>
                     <button
-                      onClick={() => { setProfileOpen(false); navigate("/login"); }}
+                      onClick={() => { setProfileOpen(false); logout(); navigate("/login"); }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-secondary transition-colors"
                     >
                       <LogOut className="h-4 w-4" /> Logout
