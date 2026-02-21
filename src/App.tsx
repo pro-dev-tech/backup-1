@@ -20,6 +20,8 @@ import SettingsPage from "@/pages/Settings";
 import ComplianceChecker from "@/pages/ComplianceChecker";
 import RegulatoryNewsFeed from "@/pages/RegulatoryNewsFeed";
 import NotFound from "@/pages/NotFound";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +43,8 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/compliance-checker" element={<ProtectedRoute><ComplianceChecker /></ProtectedRoute>} />
                 <Route path="/news-feed" element={<ProtectedRoute><RegulatoryNewsFeed /></ProtectedRoute>} />

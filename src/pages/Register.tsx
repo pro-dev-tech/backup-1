@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Shield, Eye, EyeOff, ArrowRight, ArrowLeft, Check, Loader2, Mail, Phone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ComplianceAnimations from "@/components/ComplianceAnimations";
 import PasswordStrength from "@/components/PasswordStrength";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -190,7 +191,7 @@ export default function Register() {
       stateOfRegistration: stateReg, pan, domainEmail, gstin, employeeCount, annualTurnover,
     });
     setLoading(false);
-    toast({ title: "Account Created!", description: "Welcome to ComplianceAI. Redirecting to dashboard...", variant: "success" });
+    toast({ title: "Account Created!", description: "Welcome to Nexus-Compliance. Redirecting to dashboard...", variant: "success" });
     setTimeout(() => navigate("/dashboard"), 1200);
   };
 
@@ -198,8 +199,7 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden py-8">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-accent/5 blur-[100px]" />
+      <ComplianceAnimations />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg mx-4">
         <div className="glass-card p-8">
@@ -208,7 +208,7 @@ export default function Register() {
             <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold gradient-primary-text">ComplianceAI</span>
+            <span className="text-2xl font-bold gradient-primary-text">Nexus-Compliance</span>
           </div>
 
           <h2 className="text-xl font-semibold text-foreground text-center mb-1">Create your account</h2>
@@ -237,7 +237,7 @@ export default function Register() {
                 {/* Full Name */}
                 <div>
                   <label className={labelCls}>Full Name *</label>
-                  <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Rahul Agarwal" className={inputCls} />
+                  <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Admin Name" className={inputCls} />
                   {errors.fullName && <p className={errorCls}>{errors.fullName}</p>}
                 </div>
 
@@ -313,7 +313,7 @@ export default function Register() {
                 {/* Terms */}
                 <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
                   <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} className="rounded border-border mt-0.5" />
-                  <span>I agree to the <button type="button" className="text-primary hover:underline">Terms & Conditions</button> and <button type="button" className="text-primary hover:underline">Privacy Policy</button></span>
+                  <span>I agree to the <Link to="/terms" className="text-primary hover:underline">Terms & Conditions</Link> and <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link></span>
                 </label>
                 {errors.terms && <p className={errorCls}>{errors.terms}</p>}
 
