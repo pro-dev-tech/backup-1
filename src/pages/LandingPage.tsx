@@ -4,7 +4,6 @@ import FeatureMarquee from "@/components/landing/FeatureMarquee";
 import DashboardPreview from "@/components/landing/DashboardPreview";
 import HowItWorks from "@/components/landing/HowItWorks";
 import TrustSecurity from "@/components/landing/TrustSecurity";
-import Testimonials from "@/components/landing/Testimonials";
 import FinalCTA from "@/components/landing/FinalCTA";
 import LandingFooter from "@/components/landing/LandingFooter";
 import ScrollProgress from "@/components/landing/ScrollProgress";
@@ -19,7 +18,6 @@ export default function LandingPage() {
       <DashboardPreview />
       <HowItWorks />
       <TrustSecurity />
-      <Testimonials />
       <FinalCTA />
       <LandingFooter />
     </div>

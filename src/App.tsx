@@ -23,6 +23,14 @@ import NotFound from "@/pages/NotFound";
 import Terms from "@/pages/Terms";
 import Privacy from "@/pages/Privacy";
 import LandingPage from "@/pages/LandingPage";
+import Careers from "@/pages/Careers";
+import Blog from "@/pages/Blog";
+import DataProtection from "@/pages/DataProtection";
+import Security from "@/pages/Security";
+import HelpCenter from "@/pages/HelpCenter";
+import Documentation from "@/pages/Documentation";
+import LinkedInRedirect from "@/pages/LinkedInRedirect";
+import TwitterRedirect from "@/pages/TwitterRedirect";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +54,14 @@ const App = () => (
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/privacy" element={<Privacy />} />
+                <Route path="/careers" element={<Careers />} />
+                <Route path="/blog" element={<Blog />} />
+                <Route path="/data-protection" element={<DataProtection />} />
+                <Route path="/security" element={<Security />} />
+                <Route path="/help-center" element={<HelpCenter />} />
+                <Route path="/documentation" element={<Documentation />} />
+                <Route path="/linkedin" element={<LinkedInRedirect />} />
+                <Route path="/twitter" element={<TwitterRedirect />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/compliance-checker" element={<ProtectedRoute><ComplianceChecker /></ProtectedRoute>} />
                 <Route path="/news-feed" element={<ProtectedRoute><RegulatoryNewsFeed /></ProtectedRoute>} />

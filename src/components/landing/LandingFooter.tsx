@@ -6,8 +6,8 @@ const sections = [
     title: "Company",
     links: [
       { label: "About", href: "#" },
-      { label: "Careers", href: "#" },
-      { label: "Blog", href: "#" },
+      { label: "Careers", href: "/careers" },
+      { label: "Blog", href: "/blog" },
     ],
   },
   {
@@ -15,23 +15,23 @@ const sections = [
     links: [
       { label: "Privacy Policy", href: "/privacy" },
       { label: "Terms of Service", href: "/terms" },
-      { label: "Data Protection", href: "#" },
-      { label: "Security", href: "#" },
+      { label: "Data Protection", href: "/data-protection" },
+      { label: "Security", href: "/security" },
     ],
   },
   {
     title: "Support",
     links: [
       { label: "Contact", href: "#contact" },
-      { label: "Help Center", href: "#" },
-      { label: "Documentation", href: "#" },
+      { label: "Help Center", href: "/help-center" },
+      { label: "Documentation", href: "/documentation" },
     ],
   },
   {
     title: "Social",
     links: [
-      { label: "LinkedIn", href: "#" },
-      { label: "Twitter", href: "#" },
+      { label: "LinkedIn", href: "/linkedin" },
+      { label: "Twitter", href: "/twitter" },
     ],
   },
 ];
