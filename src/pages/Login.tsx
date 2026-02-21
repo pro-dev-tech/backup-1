@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Shield, Eye, EyeOff, ArrowRight, Loader2, Chrome } from "lucide-react";
 import { motion } from "framer-motion";
+import ComplianceAnimations from "@/components/ComplianceAnimations";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import type { UserRole } from "@/backend/types";
@@ -52,7 +53,7 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     await new Promise(r => setTimeout(r, 1000));
-    await login("rahul@acmepvt.com", "", "admin");
+    await login("admin@nexus-compliance.com", "", "admin");
     setLoading(false);
     toast({ title: "Google Sign-in", description: "Signed in with Google successfully", variant: "success" });
     navigate("/dashboard");
@@ -60,8 +61,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-accent/5 blur-[100px]" />
+      <ComplianceAnimations />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md mx-4">
         <div className="glass-card p-8">
@@ -70,7 +70,7 @@ export default function Login() {
             <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold gradient-primary-text">ComplianceAI</span>
+            <span className="text-2xl font-bold gradient-primary-text">Nexus-Compliance</span>
           </div>
 
           <h2 className="text-xl font-semibold text-foreground text-center mb-1">Welcome back</h2>
@@ -140,7 +140,7 @@ export default function Login() {
 
           <p className="text-center text-sm text-muted-foreground mt-6">
             Don't have an account?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">Create account</Link>
+            <Link to="/register" className="text-primary hover:underline font-medium">Register</Link>
           </p>
         </div>
 

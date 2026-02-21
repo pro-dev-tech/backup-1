@@ -21,8 +21,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const DEMO_ADMIN: User = {
   id: "usr-001",
-  firstName: "Rahul",
-  lastName: "Agarwal",
+  firstName: "Admin",
+  lastName: "Name",
   email: "rahul@acmepvt.com",
   phone: "+91 98765 43210",
   company: {
