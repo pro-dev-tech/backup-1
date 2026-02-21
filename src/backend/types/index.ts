@@ -3,6 +3,8 @@
 // ============================================
 
 // ---- Auth ----
+export type UserRole = "admin" | "finance" | "auditor";
+
 export interface User {
   id: string;
   firstName: string;
@@ -10,7 +12,7 @@ export interface User {
   email: string;
   phone: string;
   company: Company;
-  role: "admin" | "manager" | "viewer";
+  role: UserRole;
   createdAt: string;
 }
 
@@ -23,14 +25,24 @@ export interface AuthSession {
 export interface LoginPayload {
   email: string;
   password: string;
+  role: UserRole;
 }
 
 export interface RegisterPayload {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   password: string;
   companyName: string;
+  businessType: string;
+  industryType: string;
+  stateOfRegistration: string;
+  pan: string;
+  domainEmail?: string;
+  gstin?: string;
+  employeeCount?: string;
+  annualTurnover?: string;
 }
 
 // ---- Company ----
@@ -40,6 +52,87 @@ export interface Company {
   cin: string;
   state: string;
   employees: string;
+  businessType?: string;
+  industryType?: string;
+  pan?: string;
+  annualTurnover?: string;
+}
+
+// ---- Permissions ----
+export interface RolePermissions {
+  manageCompanyProfile: boolean;
+  manageUsers: boolean;
+  assignRoles: boolean;
+  enableNewsFeed: boolean;
+  uploadDocuments: boolean;
+  runComplianceChecks: boolean;
+  viewAiInsights: boolean;
+  downloadReports: boolean;
+  modifySettings: boolean;
+  viewDashboard: boolean;
+  viewReports: boolean;
+  viewNewsFeed: boolean;
+  canChangeTheme: boolean;
+}
+
+export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
+  admin: {
+    manageCompanyProfile: true,
+    manageUsers: true,
+    assignRoles: true,
+    enableNewsFeed: true,
+    uploadDocuments: true,
+    runComplianceChecks: true,
+    viewAiInsights: true,
+    downloadReports: true,
+    modifySettings: true,
+    viewDashboard: true,
+    viewReports: true,
+    viewNewsFeed: true,
+    canChangeTheme: true,
+  },
+  finance: {
+    manageCompanyProfile: false,
+    manageUsers: false,
+    assignRoles: false,
+    enableNewsFeed: false,
+    uploadDocuments: true,
+    runComplianceChecks: true,
+    viewAiInsights: false,
+    downloadReports: true,
+    modifySettings: false,
+    viewDashboard: true,
+    viewReports: true,
+    viewNewsFeed: true,
+    canChangeTheme: true,
+  },
+  auditor: {
+    manageCompanyProfile: false,
+    manageUsers: false,
+    assignRoles: false,
+    enableNewsFeed: false,
+    uploadDocuments: false,
+    runComplianceChecks: false,
+    viewAiInsights: false,
+    downloadReports: true,
+    modifySettings: false,
+    viewDashboard: true,
+    viewReports: true,
+    viewNewsFeed: true,
+    canChangeTheme: true,
+  },
+};
+
+// ---- Managed Users ----
+export interface ManagedUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: "finance" | "auditor";
+  createdAt: string;
+  active: boolean;
 }
 
 // ---- Dashboard ----
