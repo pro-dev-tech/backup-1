@@ -76,7 +76,7 @@ function MarqueeRow({
   return (
     <div className="relative overflow-hidden py-2">
       <div
-        className={`flex gap-5 ${direction === "left" ? "animate-marquee-left" : "animate-marquee-right"}`}
+        className={`flex gap-5 ${direction === "left" ? "animate-marquee-left" : "animate-marquee-right"} hover:[animation-play-state:paused]`}
         style={{ width: "max-content" }}
       >
         {tripled.map((item, i) => (
