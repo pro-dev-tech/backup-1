@@ -3,49 +3,86 @@ import { useRef } from "react";
 import {
   BarChart3, Bot, Link2, Newspaper, CalendarDays,
   AlertTriangle, MessageSquare, FileText, ShieldCheck, Database,
+  RefreshCw, Clock, EyeOff, FileSpreadsheet, Radio,
+  Layers, Lock, Frown, CalendarX, TrendingDown,
 } from "lucide-react";
 
-const features = [
-  { icon: BarChart3, title: "Dynamic Data Charts", desc: "Real-time compliance analytics and trend visualizations" },
-  { icon: Bot, title: "AI Compliance Checker", desc: "Automated regulatory compliance scanning with AI" },
-  { icon: Link2, title: "Multiple Integrations", desc: "Connect GST, MCA, RBI portals and more" },
-  { icon: Newspaper, title: "Regulatory News Feed", desc: "Live updates from regulatory bodies across India" },
-  { icon: CalendarDays, title: "Compliance Calendar", desc: "Track filing deadlines, due dates & reminders" },
-  { icon: AlertTriangle, title: "Risk Monitor & Alerts", desc: "Proactive risk detection with instant alerts" },
-  { icon: MessageSquare, title: "AI Compliance Assistant", desc: "Chat-based AI for compliance queries" },
-  { icon: FileText, title: "Report Generation", desc: "Auto-generate audit-ready compliance reports" },
-  { icon: ShieldCheck, title: "Role-Based Access", desc: "Granular permissions for admin, finance & auditor" },
-  { icon: Database, title: "Secure Infrastructure", desc: "Enterprise-grade security for sensitive data" },
+const problems = [
+  { icon: RefreshCw, title: "Frequent Regulatory Changes", color: "hsl(0 72% 51%)" },
+  { icon: Clock, title: "Missed Filing Deadlines", color: "hsl(25 95% 53%)" },
+  { icon: EyeOff, title: "No Risk Visibility", color: "hsl(0 72% 51%)" },
+  { icon: FileSpreadsheet, title: "Manual & Spreadsheet-Based Tracking", color: "hsl(38 92% 50%)" },
+  { icon: Radio, title: "Lack of Real-Time Monitoring", color: "hsl(25 95% 53%)" },
+  { icon: Layers, title: "Information Overload", color: "hsl(38 92% 50%)" },
+  { icon: Lock, title: "Limited Role-Based Access", color: "hsl(0 72% 51%)" },
+  { icon: Frown, title: "Audit Stress", color: "hsl(25 95% 53%)" },
+  { icon: CalendarX, title: "Poor Compliance Calendar Management", color: "hsl(38 92% 50%)" },
+  { icon: TrendingDown, title: "Lack of Predictive Insights", color: "hsl(0 72% 51%)" },
 ];
 
-function FeatureCard({ icon: Icon, title, desc }: { icon: any; title: string; desc: string }) {
+const features = [
+  { icon: BarChart3, title: "Dynamic Data Charts", color: "hsl(220 90% 56%)" },
+  { icon: Bot, title: "AI Compliance Checker", color: "hsl(250 80% 62%)" },
+  { icon: Link2, title: "Multiple Integrations", color: "hsl(220 90% 56%)" },
+  { icon: Newspaper, title: "Real-Time Regulatory News Feed", color: "hsl(142 71% 45%)" },
+  { icon: CalendarDays, title: "Compliance Calendar", color: "hsl(250 80% 62%)" },
+  { icon: AlertTriangle, title: "Risk Monitor & Alerts", color: "hsl(38 92% 50%)" },
+  { icon: MessageSquare, title: "AI Compliance Assistant", color: "hsl(220 90% 56%)" },
+  { icon: FileText, title: "Automated Report Generation", color: "hsl(142 71% 45%)" },
+  { icon: ShieldCheck, title: "Role-Based Access Control", color: "hsl(250 80% 62%)" },
+  { icon: Database, title: "Secure Data Infrastructure", color: "hsl(220 90% 56%)" },
+];
+
+function ProblemCard({ icon: Icon, title, color }: { icon: any; title: string; color: string }) {
   return (
-    <div className="flex-shrink-0 w-[280px] rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300 group cursor-default">
-      <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
-        <Icon className="w-5 h-5 text-primary" />
+    <div className="flex-shrink-0 w-[260px] rounded-2xl border border-destructive/20 bg-card/80 backdrop-blur-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-default">
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+        style={{ backgroundColor: `${color} / 0.12)`.replace(")", ""), background: `${color.replace(")", " / 0.12)")}` }}
+      >
+        <Icon className="w-5 h-5" style={{ color }} />
       </div>
-      <h3 className="text-sm font-semibold text-foreground mb-1.5">{title}</h3>
-      <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
     </div>
   );
 }
 
-function MarqueeRow({ features: items, direction }: { features: { icon: any; title: string; desc: string }[]; direction: "left" | "right" }) {
-  const features = items;
-  const doubled = [...features, ...features];
+function FeatureCard({ icon: Icon, title, color }: { icon: any; title: string; color: string }) {
   return (
-    <div className="relative overflow-hidden py-2 group">
-      <motion.div
-        className="flex gap-5"
-        animate={{ x: direction === "left" ? [0, -50 * features.length + "%"] : [-50 * features.length + "%", 0] }}
-        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-        style={{ width: "fit-content" }}
-        whileHover={{ animationPlayState: "paused" }}
+    <div className="flex-shrink-0 w-[260px] rounded-2xl border border-primary/20 bg-card/80 backdrop-blur-sm p-5 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1 transition-all duration-300 group cursor-default">
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+        style={{ background: `${color.replace(")", " / 0.12)")}` }}
       >
-        {doubled.map((f, i) => (
-          <FeatureCard key={`${f.title}-${i}`} {...f} />
+        <Icon className="w-5 h-5" style={{ color }} />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    </div>
+  );
+}
+
+function MarqueeRow({
+  items,
+  direction,
+  renderCard,
+}: {
+  items: { icon: any; title: string; color: string }[];
+  direction: "left" | "right";
+  renderCard: (item: { icon: any; title: string; color: string }, i: number) => React.ReactNode;
+}) {
+  // Triple the items to ensure seamless loop
+  const tripled = [...items, ...items, ...items];
+
+  return (
+    <div className="relative overflow-hidden py-2">
+      <div
+        className={`flex gap-5 ${direction === "left" ? "animate-marquee-left" : "animate-marquee-right"}`}
+        style={{ width: "max-content" }}
+      >
+        {tripled.map((item, i) => (
+          <div key={`${item.title}-${i}`}>{renderCard(item, i)}</div>
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -72,9 +109,30 @@ export default function FeatureMarquee() {
         </motion.div>
       </div>
 
-      <div className="space-y-5">
-        <MarqueeRow features={features.slice(0, 5)} direction="left" />
-        <MarqueeRow features={features.slice(5)} direction="right" />
+      <div className="space-y-6">
+        {/* Problems row - left to right */}
+        <div>
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-destructive/70 mb-3">
+            ⚠️ Common Compliance Problems
+          </p>
+          <MarqueeRow
+            items={problems}
+            direction="right"
+            renderCard={(item, i) => <ProblemCard key={i} {...item} />}
+          />
+        </div>
+
+        {/* Features row - right to left */}
+        <div>
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-primary/70 mb-3">
+            ✅ Nexus-Compliance Solutions
+          </p>
+          <MarqueeRow
+            items={features}
+            direction="left"
+            renderCard={(item, i) => <FeatureCard key={i} {...item} />}
+          />
+        </div>
       </div>
     </section>
   );
