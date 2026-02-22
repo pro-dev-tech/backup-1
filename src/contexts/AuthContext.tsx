@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { User, UserRole, ManagedUser, RolePermissions } from "@/backend/types";
 import { ROLE_PERMISSIONS } from "@/backend/types";
+import { api, setToken, clearToken } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -59,12 +60,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("cai_managed_users", JSON.stringify(managedUsers));
   }, [managedUsers]);
 
+  // Try backend auth first, fallback to demo mode
   const login = useCallback(async (email: string, _password: string, loginRole: UserRole): Promise<boolean> => {
-    // Demo: accept any credentials
+    try {
+      const res = await api.post<{ user: User; token: string }>("/auth/login", {
+        email,
+        password: _password,
+        role: loginRole,
+      });
+      if (res.success && res.data) {
+        const userData = { ...res.data.user, role: loginRole };
+        setUser(userData);
+        setToken(res.data.token);
+        return true;
+      }
+    } catch {
+      // Backend unavailable – fall back to demo mode
+      console.info("Backend unavailable, using demo auth");
+    }
+
+    // Demo fallback (works without backend)
     if (loginRole === "admin") {
       setUser({ ...DEMO_ADMIN, email });
     } else {
-      // Check managed users
       const managed = managedUsers.find(u => u.email === email && u.role === loginRole && u.active);
       if (managed) {
         setUser({
@@ -78,7 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           createdAt: managed.createdAt,
         });
       } else {
-        // Demo fallback
         setUser({
           ...DEMO_ADMIN,
           email,
@@ -89,20 +106,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     const token = `tok_${Date.now()}`;
-    localStorage.setItem("cai_auth_token", token);
+    setToken(token);
     return true;
   }, [managedUsers]);
 
-  const register = useCallback(async (_data: any): Promise<boolean> => {
-    setUser({ ...DEMO_ADMIN });
-    localStorage.setItem("cai_auth_token", `tok_${Date.now()}`);
+  const register = useCallback(async (data: any): Promise<boolean> => {
+    try {
+      const res = await api.post<{ user: User; token: string }>("/auth/register", {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        password: data.password,
+        phone: data.phone,
+        companyName: data.companyName,
+      });
+      if (res.success && res.data) {
+        setUser(res.data.user);
+        setToken(res.data.token);
+        return true;
+      }
+    } catch {
+      console.info("Backend unavailable, using demo registration");
+    }
+
+    // Demo fallback
+    setUser({ ...DEMO_ADMIN, ...data });
+    setToken(`tok_${Date.now()}`);
     return true;
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem("cai_auth_token");
+    clearToken();
     localStorage.removeItem("cai_auth_user");
+    // Fire and forget backend logout
+    api.post("/auth/logout", {}).catch(() => {});
   }, []);
 
   const addManagedUser = useCallback((userData: Omit<ManagedUser, "id" | "createdAt" | "active">) => {
@@ -113,14 +151,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       active: true,
     };
     setManagedUsers(prev => [...prev, newUser]);
+    // Sync to backend
+    api.post("/auth/managed-users", userData).catch(() => {});
   }, []);
 
   const removeManagedUser = useCallback((id: string) => {
     setManagedUsers(prev => prev.filter(u => u.id !== id));
+    api.delete(`/auth/managed-users/${id}`).catch(() => {});
   }, []);
 
   const toggleManagedUser = useCallback((id: string) => {
     setManagedUsers(prev => prev.map(u => u.id === id ? { ...u, active: !u.active } : u));
+    api.patch(`/auth/managed-users/${id}/toggle`).catch(() => {});
   }, []);
 
   const hasPermission = useCallback((key: keyof RolePermissions) => {
