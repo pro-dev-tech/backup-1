@@ -35,10 +35,20 @@ const features = [
 
 function ProblemCard({ icon: Icon, title, color }: { icon: any; title: string; color: string }) {
   return (
-    <div className="flex-shrink-0 w-[260px] rounded-2xl border border-destructive/20 bg-card/80 backdrop-blur-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-default">
+    <div
+      className="flex-shrink-0 w-[260px] rounded-2xl border border-destructive/20 bg-card/80 backdrop-blur-sm p-5 hover:-translate-y-1 transition-all duration-300 cursor-default relative overflow-hidden group"
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = color;
+        e.currentTarget.style.boxShadow = `0 0 20px ${color.replace(")", " / 0.3)")}, 0 0 40px ${color.replace(")", " / 0.15)")}`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "";
+        e.currentTarget.style.boxShadow = "";
+      }}
+    >
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
-        style={{ backgroundColor: `${color} / 0.12)`.replace(")", ""), background: `${color.replace(")", " / 0.12)")}` }}
+        style={{ background: `${color.replace(")", " / 0.12)")}` }}
       >
         <Icon className="w-5 h-5" style={{ color }} />
       </div>
@@ -49,7 +59,17 @@ function ProblemCard({ icon: Icon, title, color }: { icon: any; title: string; c
 
 function FeatureCard({ icon: Icon, title, color }: { icon: any; title: string; color: string }) {
   return (
-    <div className="flex-shrink-0 w-[260px] rounded-2xl border border-primary/20 bg-card/80 backdrop-blur-sm p-5 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-1 transition-all duration-300 group cursor-default">
+    <div
+      className="flex-shrink-0 w-[260px] rounded-2xl border border-primary/20 bg-card/80 backdrop-blur-sm p-5 hover:-translate-y-1 transition-all duration-300 cursor-default relative overflow-hidden group"
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = color;
+        e.currentTarget.style.boxShadow = `0 0 20px ${color.replace(")", " / 0.3)")}, 0 0 40px ${color.replace(")", " / 0.15)")}`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "";
+        e.currentTarget.style.boxShadow = "";
+      }}
+    >
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
         style={{ background: `${color.replace(")", " / 0.12)")}` }}
