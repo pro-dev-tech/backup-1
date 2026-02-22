@@ -183,7 +183,6 @@ export default function Register() {
   const handleSubmit = async () => {
     if (!validateStep2()) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1500));
     await register({
       firstName: fullName.split(" ")[0],
       lastName: fullName.split(" ").slice(1).join(" "),

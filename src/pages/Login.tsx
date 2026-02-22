@@ -38,7 +38,6 @@ export default function Login() {
     }
 
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
     const success = await login(email, password, loginRole);
     setLoading(false);
 
@@ -52,7 +51,6 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
     await login("admin@nexus-compliance.com", "", "admin");
     setLoading(false);
     toast({ title: "Google Sign-in", description: "Signed in with Google successfully", variant: "success" });
