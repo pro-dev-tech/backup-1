@@ -36,6 +36,21 @@ app.use("/api/news", require("./routes/news"));
 app.use("/api/ai", require("./routes/aiAssistant"));
 app.use("/api/settings", require("./routes/settings"));
 
+// Root route
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      name: "Nexus Compliance AI Backend",
+      version: "1.0.0",
+      status: "running",
+      endpoints: "/api",
+      health: "/api/health",
+      docs: "See server/README.md",
+    },
+  });
+});
+
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({ success: true, data: { status: "ok", uptime: process.uptime() } });
