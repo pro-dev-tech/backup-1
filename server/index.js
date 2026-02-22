@@ -7,6 +7,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const path = require("path");
 const { PORT } = require("./config/keys");
 
 const app = express();
@@ -36,17 +37,18 @@ app.use("/api/news", require("./routes/news"));
 app.use("/api/ai", require("./routes/aiAssistant"));
 app.use("/api/settings", require("./routes/settings"));
 
-// Root route
-app.get("/", (req, res) => {
+// ---- Serve Frontend (production) ----
+const distPath = path.join(__dirname, "..", "dist");
+app.use(express.static(distPath));
+
+// Root API info
+app.get("/api/info", (req, res) => {
   res.json({
     success: true,
     data: {
       name: "Nexus Compliance AI Backend",
       version: "1.0.0",
       status: "running",
-      endpoints: "/api",
-      health: "/api/health",
-      docs: "See server/README.md",
     },
   });
 });
@@ -56,9 +58,12 @@ app.get("/api/health", (req, res) => {
   res.json({ success: true, data: { status: "ok", uptime: process.uptime() } });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ success: false, error: "Route not found." });
+// SPA catch-all – serve index.html for non-API routes
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ success: false, error: "Route not found." });
+  }
+  res.sendFile(path.join(distPath, "index.html"));
 });
 
 // Error handler
