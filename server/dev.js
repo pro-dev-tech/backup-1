@@ -17,16 +17,15 @@ const backend = spawn("node", ["--watch", "index.js"], {
   env: { ...process.env, NODE_ENV: "development" },
 });
 
-// Start Vite frontend dev server (avoid shell: true to prevent deprecation warning)
-const frontend = spawn(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["vite", "--port", "8080", "--host"],
-  {
-    cwd: ROOT_DIR,
-    stdio: "inherit",
-    env: { ...process.env, NODE_ENV: "development" },
-  }
-);
+// Start Vite frontend dev server
+// Use shell: true on Windows to resolve npx properly
+const isWindows = process.platform === "win32";
+const frontend = spawn("npx", ["vite", "--port", "8080", "--host"], {
+  cwd: ROOT_DIR,
+  stdio: "inherit",
+  shell: isWindows,
+  env: { ...process.env, NODE_ENV: "development" },
+});
 
 function cleanup() {
   console.log("\n🛑 Shutting down...");
