@@ -11,10 +11,10 @@ interface Message {
 }
 
 const examplePrompts = [
-  "Explain new GST amendment",
-  "Draft reply to ROC notice",
-  "What compliances apply to 35 employees in Karnataka?",
-  "Summarize PF compliance changes for 2026",
+  "When is my next GST filing deadline?",
+  "Show my overdue compliance items",
+  "What's my current risk score?",
+  "Summarize my compliance status",
 ];
 
 const initialMessages: Message[] = [
