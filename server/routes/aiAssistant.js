@@ -1,5 +1,6 @@
 // ============================================
 // AI Assistant Routes – Cascading fallback: Gemini → Groq → OpenRouter
+// Context-aware: pulls live data from calendar, dashboard, risk, settings
 // ============================================
 
 const router = require("express").Router();
@@ -7,7 +8,104 @@ const { authenticate } = require("../middleware/auth");
 const { GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY } = require("../config/keys");
 const store = require("../data/store");
 
-const SYSTEM_PROMPT = `You are a professional Compliance Assistant specializing in Indian regulatory and business compliance. Your role is to provide accurate, actionable, and well-structured guidance on all compliance-related matters.
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// Build dynamic context from all features
+function buildUserContext() {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const currentDay = now.getDate();
+
+  // ---- Calendar / Deadlines ----
+  const upcomingEvents = store.calendarEvents
+    .filter((e) => {
+      if (e.status === "completed") return false;
+      const eventDate = new Date(e.year, e.month, e.day);
+      return eventDate >= now;
+    })
+    .sort((a, b) => new Date(a.year, a.month, a.day) - new Date(b.year, b.month, b.day))
+    .slice(0, 10);
+
+  const overdueEvents = store.calendarEvents.filter((e) => e.status === "overdue");
+
+  const calendarContext = upcomingEvents.length > 0
+    ? upcomingEvents.map((e) => `- ${e.title}: ${MONTHS[e.month]} ${e.day}, ${e.year} (${e.status})`).join("\n")
+    : "No upcoming events.";
+
+  const overdueContext = overdueEvents.length > 0
+    ? overdueEvents.map((e) => `- ${e.title}: ${MONTHS[e.month]} ${e.day}, ${e.year}`).join("\n")
+    : "None.";
+
+  // ---- Dashboard Stats ----
+  const stats = store.dashboardData.stats;
+  const dashboardContext = stats.map((s) => `- ${s.label}: ${s.value} (${s.change})`).join("\n");
+
+  // ---- Compliance Score ----
+  const complianceScore = store.dashboardData.complianceScore;
+  const filingStatus = store.dashboardData.filingStatus.map((f) => `${f.name}: ${f.value}`).join(", ");
+
+  // ---- Risk Data ----
+  const riskContext = store.riskData.factors
+    .map((r) => `- ${r.label}: Score ${r.score}/100 (Trend: ${r.trend}, Change: ${r.change > 0 ? "+" : ""}${r.change})`)
+    .join("\n");
+
+  const riskRules = store.riskData.rules
+    .filter((r) => r.triggered)
+    .map((r) => `- ${r.condition} → ${r.result}`)
+    .join("\n");
+
+  // ---- Company Profile ----
+  const company = store.settings.company;
+  const profile = store.settings.profile;
+
+  // ---- Integrations ----
+  const connectedIntegrations = store.integrations
+    .filter((i) => i.connected)
+    .map((i) => `${i.name} (${i.description}) – last synced ${i.lastSync}`)
+    .join(", ");
+
+  // ---- State Compliance ----
+  const stateCompliance = store.dashboardData.stateCompliance
+    .map((s) => `${s.state}: ${s.score}/100`)
+    .join(", ");
+
+  return `
+=== LIVE BUSINESS CONTEXT (Today: ${MONTHS[currentMonth]} ${currentDay}, ${currentYear}) ===
+
+COMPANY PROFILE:
+- Name: ${company.name}
+- GSTIN: ${company.gstin}
+- CIN: ${company.cin}
+- State: ${company.state}
+- Employees: ${company.employees}
+- Contact: ${profile.firstName} ${profile.lastName} (${profile.email}, ${profile.phone})
+
+COMPLIANCE DASHBOARD:
+${dashboardContext}
+- Overall Compliance Score: ${complianceScore}/100
+- Filing Status: ${filingStatus}
+- State-wise Compliance: ${stateCompliance}
+
+UPCOMING DEADLINES (Next 10):
+${calendarContext}
+
+OVERDUE ITEMS:
+${overdueContext}
+
+RISK ASSESSMENT:
+${riskContext}
+
+TRIGGERED COMPLIANCE RULES:
+${riskRules}
+
+CONNECTED INTEGRATIONS:
+${connectedIntegrations}
+
+=== END CONTEXT ===`;
+}
+
+const BASE_SYSTEM_PROMPT = `You are a professional Compliance Assistant specializing in Indian regulatory and business compliance. You have access to the user's live business data including their company profile, compliance calendar, risk scores, filing status, and deadlines.
 
 Core Expertise:
 - Taxation: GST (filing, ITC, returns), Income Tax (TDS, advance tax, ITR), Professional Tax
@@ -19,27 +117,32 @@ Core Expertise:
 
 Response Guidelines:
 1. Always be professional, precise, and solution-oriented
-2. Structure responses with clear headings, bullet points, and numbered steps
-3. Cite relevant Indian laws, sections, rules, or notifications where applicable
-4. Highlight deadlines, penalties, and late fees when relevant
-5. Provide concrete action items the user can follow immediately
-6. Flag potential risks or compliance gaps proactively
-7. When unsure, clearly state limitations and recommend consulting a qualified professional
+2. When users ask about deadlines, dates, or status — refer to the LIVE BUSINESS CONTEXT provided below
+3. Structure responses with clear headings, bullet points, and numbered steps
+4. Cite relevant Indian laws, sections, rules, or notifications where applicable
+5. Highlight deadlines, penalties, and late fees when relevant
+6. Provide concrete action items the user can follow immediately
+7. Flag potential risks or compliance gaps proactively based on the user's actual data
+8. Personalize responses using the company profile and current compliance status
+9. When unsure, clearly state limitations and recommend consulting a qualified professional
 
-You respond to any query in a professional manner — whether it's about compliance, regulations, business operations, or general guidance. Always maintain a helpful and authoritative tone.`;
+You respond to any query in a professional manner. Always maintain a helpful and authoritative tone.`;
+
+function getSystemPrompt() {
+  return BASE_SYSTEM_PROMPT + "\n\n" + buildUserContext();
+}
 
 // ---- Provider Handlers ----
 
-// Gemini – uses Google's generative language REST API (matching Python google-genai SDK)
 async function callGemini(messages) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
+  const systemPrompt = getSystemPrompt();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-  // Build contents array: system prompt as first user turn, then conversation
   const contents = [];
-  contents.push({ role: "user", parts: [{ text: SYSTEM_PROMPT }] });
-  contents.push({ role: "model", parts: [{ text: "Understood. I'm ready to help with your compliance queries." }] });
+  contents.push({ role: "user", parts: [{ text: systemPrompt }] });
+  contents.push({ role: "model", parts: [{ text: "Understood. I have access to your live business data and I'm ready to help with your compliance queries." }] });
 
   for (const m of messages) {
     contents.push({
@@ -68,12 +171,11 @@ async function callGemini(messages) {
   return json.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 }
 
-// Groq – OpenAI-compatible API at api.groq.com (matching Python openai SDK with Groq base_url)
 async function callGroq(messages) {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
 
   const formatted = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: getSystemPrompt() },
     ...messages.map((m) => ({
       role: m.role === "ai" ? "assistant" : "user",
       content: m.content,
@@ -102,12 +204,11 @@ async function callGroq(messages) {
   return json.choices?.[0]?.message?.content || "I couldn't generate a response.";
 }
 
-// OpenRouter – OpenAI-compatible API at openrouter.ai (matching Python openai SDK with OpenRouter base_url)
 async function callOpenRouter(messages) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
   const formatted = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: getSystemPrompt() },
     ...messages.map((m) => ({
       role: m.role === "ai" ? "assistant" : "user",
       content: m.content,
@@ -224,7 +325,7 @@ router.delete("/history", authenticate, (req, res) => {
   store.chatHistory.push({
     id: "msg-init",
     role: "ai",
-    content: "Hello! I'm your Compliance Assistant. How can I help you with regulatory or business compliance today?",
+    content: "Hello! I'm your Compliance Assistant. I have access to your company data, compliance calendar, risk scores, and filing status. How can I help you today?",
     timestamp: new Date().toISOString(),
   });
   res.json({ success: true, data: null, message: "Chat history cleared." });
