@@ -30,23 +30,36 @@ You respond to any query in a professional manner — whether it's about complia
 
 // ---- Provider Handlers ----
 
+// Gemini – uses Google's generative language REST API (matching Python google-genai SDK)
 async function callGemini(messages) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const contents = messages.map((m) => ({
-    role: m.role === "ai" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-  contents.unshift({ role: "user", parts: [{ text: SYSTEM_PROMPT }] });
-  if (contents.length > 1 && contents[0].role === contents[1].role) {
-    contents.splice(1, 0, { role: "model", parts: [{ text: "Understood. I'm ready to help with your compliance queries." }] });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+  // Build contents array: system prompt as first user turn, then conversation
+  const contents = [];
+  contents.push({ role: "user", parts: [{ text: SYSTEM_PROMPT }] });
+  contents.push({ role: "model", parts: [{ text: "Understood. I'm ready to help with your compliance queries." }] });
+
+  for (const m of messages) {
+    contents.push({
+      role: m.role === "ai" ? "model" : "user",
+      parts: [{ text: m.content }],
+    });
   }
 
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents }),
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.7,
+      },
+    }),
   });
+
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`Gemini API error (${resp.status}): ${err}`);
@@ -55,17 +68,32 @@ async function callGemini(messages) {
   return json.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 }
 
+// Groq – OpenAI-compatible API at api.groq.com (matching Python openai SDK with Groq base_url)
 async function callGroq(messages) {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
+
   const formatted = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...messages.map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content })),
+    ...messages.map((m) => ({
+      role: m.role === "ai" ? "assistant" : "user",
+      content: m.content,
+    })),
   ];
+
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
-    body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: formatted }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "qwen/qwen3-32b",
+      messages: formatted,
+      max_tokens: 2048,
+      temperature: 0.7,
+    }),
   });
+
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`Groq API error (${resp.status}): ${err}`);
@@ -74,17 +102,32 @@ async function callGroq(messages) {
   return json.choices?.[0]?.message?.content || "I couldn't generate a response.";
 }
 
+// OpenRouter – OpenAI-compatible API at openrouter.ai (matching Python openai SDK with OpenRouter base_url)
 async function callOpenRouter(messages) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
+
   const formatted = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...messages.map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content })),
+    ...messages.map((m) => ({
+      role: m.role === "ai" ? "assistant" : "user",
+      content: m.content,
+    })),
   ];
+
   const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENROUTER_API_KEY}` },
-    body: JSON.stringify({ model: "google/gemini-2.5-flash-preview", messages: formatted }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "google/gemma-3-27b-it:free",
+      messages: formatted,
+      max_tokens: 2048,
+      temperature: 0.7,
+    }),
   });
+
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`OpenRouter API error (${resp.status}): ${err}`);
