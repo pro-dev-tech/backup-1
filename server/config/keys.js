@@ -13,6 +13,6 @@ module.exports = {
   GROQ_API_KEY: process.env.GROQ_API_KEY || "",
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
 
-  // News
-  NEWSDATA_API_KEY: process.env.NEWSDATA_API_KEY || "",
+  // News – Event Registry (newsapi.ai)
+  EVENTREGISTRY_API_KEY: process.env.EVENTREGISTRY_API_KEY || "",
 };

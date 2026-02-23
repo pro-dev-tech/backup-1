@@ -1,52 +1,78 @@
 // ============================================
-// News Routes – Compliance-focused news via NewsData.io + fallback
+// News Routes – Compliance news via Event Registry (newsapi.ai) + fallback
 // ============================================
 
 const router = require("express").Router();
 const { authenticate } = require("../middleware/auth");
-const { NEWSDATA_API_KEY } = require("../config/keys");
+const { EVENTREGISTRY_API_KEY } = require("../config/keys");
 const { fallbackArticles } = require("../data/store");
 
 async function fetchLiveNews(category) {
-  if (!NEWSDATA_API_KEY) return null;
+  if (!EVENTREGISTRY_API_KEY) return null;
 
   try {
-    const complianceTerms = "compliance OR regulation OR amendment OR notification OR circular OR gazette OR CBIC OR CBDT OR MCA OR SEBI OR RBI OR EPFO OR ESIC";
-    const categoryTerms = {
-      GST: "GST OR CGST OR SGST OR IGST OR goods services tax OR input tax credit OR e-invoice OR e-way bill",
-      MCA: "MCA OR company law OR ROC OR annual return OR corporate affairs OR companies act",
-      SEBI: "SEBI OR securities OR listing obligation OR insider trading OR mutual fund regulation",
-      Labour: "labour code OR EPF OR ESIC OR minimum wages OR industrial relations OR employee provident fund",
-      Financial: "RBI OR banking regulation OR FEMA OR NBFC OR reserve bank OR monetary policy",
-      Tax: "income tax OR TDS OR advance tax OR ITR OR CBDT OR direct tax",
+    const today = new Date().toISOString().split("T")[0];
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    // Build keyword filters based on category
+    const categoryKeywords = {
+      GST: ["GST compliance", "CGST notification", "SGST amendment", "GST return filing", "e-invoice regulation"],
+      MCA: ["MCA compliance", "company law amendment", "ROC filing", "corporate affairs notification"],
+      SEBI: ["SEBI regulation", "securities compliance", "listing obligation", "SEBI circular"],
+      Labour: ["labour compliance India", "EPF regulation", "ESIC notification", "minimum wages order"],
+      Financial: ["RBI regulation", "banking compliance", "FEMA notification", "NBFC guidelines"],
+      Tax: ["income tax compliance", "TDS regulation", "CBDT notification", "direct tax amendment"],
+      Environmental: ["environmental compliance India", "pollution control regulation", "green compliance"],
     };
 
-    const query = encodeURIComponent(
-      category && category !== "All" && categoryTerms[category]
-        ? `India (${categoryTerms[category]}) (${complianceTerms})`
-        : `India (${complianceTerms})`
-    );
+    const keywords = category && category !== "All" && categoryKeywords[category]
+      ? categoryKeywords[category]
+      : ["GST compliance", "MSME rules", "startup compliance", "India business regulations", "Indian regulatory compliance"];
 
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWSDATA_API_KEY}&q=${query}&country=in&language=en&category=business,politics`;
-    const resp = await fetch(url);
+    const keywordQuery = keywords.map((k) => ({ keyword: k }));
+
+    const payload = {
+      apiKey: EVENTREGISTRY_API_KEY,
+      query: {
+        $query: {
+          $and: [
+            { $or: keywordQuery },
+            { locationUri: "http://en.wikipedia.org/wiki/India" },
+          ],
+        },
+        dateStart: lastWeek,
+        dateEnd: today,
+      },
+      resultType: "articles",
+      articlesSortBy: "date",
+      articlesCount: 15,
+    };
+
+    const resp = await fetch("https://eventregistry.org/api/v1/article/getArticles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
     if (!resp.ok) return null;
 
     const json = await resp.json();
-    if (!json.results || json.results.length === 0) return null;
+    const results = json.articles?.results;
+    if (!results || results.length === 0) return null;
 
-    return json.results.slice(0, 10).map((item, idx) => ({
+    return results.map((item, idx) => ({
       id: idx + 1,
       title: item.title || "Untitled",
-      source: item.source_name || "Unknown",
-      url: item.link || "#",
-      publishedAt: item.pubDate || new Date().toISOString(),
-      category: detectCategory(item.title + " " + (item.description || "")),
-      impactLevel: detectImpact(item.title + " " + (item.description || "")),
-      summary: (item.description || "").slice(0, 200),
-      details: item.content || item.description || "",
+      source: item.source?.title || "Unknown",
+      url: item.url || "#",
+      publishedAt: item.dateTimePub || item.date || new Date().toISOString(),
+      category: detectCategory(item.title + " " + (item.body || "")),
+      impactLevel: detectImpact(item.title + " " + (item.body || "")),
+      summary: (item.body || "").slice(0, 250),
+      details: item.body || "",
     }));
   } catch (err) {
-    console.error("NewsData.io error:", err.message);
+    console.error("Event Registry error:", err.message);
     return null;
   }
 }
@@ -59,6 +85,7 @@ function detectCategory(text) {
   if (t.includes("labour") || t.includes("epf") || t.includes("esic") || t.includes("employee") || t.includes("wages")) return "Labour";
   if (t.includes("rbi") || t.includes("reserve bank") || t.includes("banking") || t.includes("fema") || t.includes("nbfc")) return "Financial";
   if (t.includes("income tax") || t.includes("tds") || t.includes("cbdt") || t.includes("itr")) return "Tax";
+  if (t.includes("environment") || t.includes("pollution") || t.includes("green")) return "Environmental";
   return "General";
 }
 
