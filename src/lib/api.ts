@@ -42,6 +42,12 @@ export async function apiFetch<T>(
     headers,
   });
 
+  // Check if response is actually JSON (backend may not be running)
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("Backend server is not running. Start the server with: cd server && npm run dev");
+  }
+
   const json = await res.json();
 
   if (!res.ok) {
