@@ -49,12 +49,12 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    await login("admin@nexus-compliance.com", "", "admin");
-    setLoading(false);
-    toast({ title: "Google Sign-in", description: "Signed in with Google successfully", variant: "success" });
-    navigate("/dashboard");
+  const handleGoogleLogin = () => {
+    toast({
+      title: "Google Sign-in not configured",
+      description: "Use email/password login. OAuth backend is not configured in this project yet.",
+      variant: "warning",
+    });
   };
 
   return (

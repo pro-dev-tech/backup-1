@@ -9,6 +9,75 @@ const { GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY } = require("../config/
 const store = require("../data/store");
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const REQUEST_TIMEOUT_MS = 20000;
+const MODEL_CONFIG = {
+  maxTokens: 1000,
+  temperature: 0.7,
+};
+
+function withTimeout(ms = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+function normalizeProviderError(prefix, err) {
+  if (err?.name === "AbortError") {
+    return `${prefix} request timed out after ${REQUEST_TIMEOUT_MS}ms`;
+  }
+  return `${prefix} ${err?.message || "Unknown provider error"}`;
+}
+
+function extractOpenAIText(json) {
+  const choice = json?.choices?.[0];
+  if (!choice) return "";
+
+  if (typeof choice.message?.content === "string") {
+    return choice.message.content;
+  }
+
+  if (Array.isArray(choice.message?.content)) {
+    return choice.message.content
+      .map((part) => (typeof part?.text === "string" ? part.text : ""))
+      .join("")
+      .trim();
+  }
+
+  return "";
+}
+
+function extractGeminiText(json) {
+  const parts = json?.candidates?.[0]?.content?.parts || [];
+  const text = parts
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .join("")
+    .trim();
+  return text;
+}
+
+function toOpenAIMessages(messages) {
+  return [
+    { role: "system", content: getSystemPrompt() },
+    ...messages.map((m) => ({
+      role: m.role === "ai" ? "assistant" : "user",
+      content: m.content,
+    })),
+  ];
+}
+
+function toGeminiContents(messages) {
+  const mapped = messages.map((m) => ({
+    role: m.role === "ai" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  if (mapped.length > 0) return mapped;
+
+  return [{ role: "user", parts: [{ text: "Please assist with my compliance query." }] }];
+}
 
 // Build dynamic context from all features
 function buildUserContext() {
@@ -129,7 +198,7 @@ Response Guidelines:
 You respond to any query in a professional manner. Always maintain a helpful and authoritative tone.`;
 
 function getSystemPrompt() {
-  return BASE_SYSTEM_PROMPT + "\n\n" + buildUserContext();
+  return `${BASE_SYSTEM_PROMPT}\n\n${buildUserContext()}`;
 }
 
 // ---- Provider Handlers ----
@@ -137,104 +206,120 @@ function getSystemPrompt() {
 async function callGemini(messages) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
-  const systemPrompt = getSystemPrompt();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const timeout = withTimeout();
 
-  const contents = [];
-  contents.push({ role: "user", parts: [{ text: systemPrompt }] });
-  contents.push({ role: "model", parts: [{ text: "Understood. I have access to your live business data and I'm ready to help with your compliance queries." }] });
-
-  for (const m of messages) {
-    contents.push({
-      role: m.role === "ai" ? "model" : "user",
-      parts: [{ text: m.content }],
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      signal: timeout.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: toGeminiContents(messages),
+        systemInstruction: {
+          parts: [{ text: getSystemPrompt() }],
+        },
+        generationConfig: {
+          maxOutputTokens: MODEL_CONFIG.maxTokens,
+          temperature: MODEL_CONFIG.temperature,
+        },
+      }),
     });
-  }
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        maxOutputTokens: 2048,
-        temperature: 0.7,
-      },
-    }),
-  });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`Gemini API error (${resp.status}): ${err.slice(0, 500)}`);
+    }
 
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Gemini API error (${resp.status}): ${err}`);
+    const json = await resp.json();
+    const text = extractGeminiText(json);
+    if (!text) throw new Error("Gemini returned an empty response");
+
+    return text;
+  } catch (err) {
+    throw new Error(normalizeProviderError("Gemini failed:", err));
+  } finally {
+    timeout.clear();
   }
-  const json = await resp.json();
-  return json.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 }
 
 async function callGroq(messages) {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
 
-  const formatted = [
-    { role: "system", content: getSystemPrompt() },
-    ...messages.map((m) => ({
-      role: m.role === "ai" ? "assistant" : "user",
-      content: m.content,
-    })),
-  ];
+  const timeout = withTimeout();
 
-  const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "qwen/qwen3-32b",
-      messages: formatted,
-      max_tokens: 2048,
-      temperature: 0.7,
-    }),
-  });
+  try {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      signal: timeout.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3-32b",
+        messages: toOpenAIMessages(messages),
+        max_tokens: MODEL_CONFIG.maxTokens,
+        temperature: MODEL_CONFIG.temperature,
+        stream: false,
+      }),
+    });
 
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Groq API error (${resp.status}): ${err}`);
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`Groq API error (${resp.status}): ${err.slice(0, 500)}`);
+    }
+
+    const json = await resp.json();
+    const text = extractOpenAIText(json);
+    if (!text) throw new Error("Groq returned an empty response");
+
+    return text;
+  } catch (err) {
+    throw new Error(normalizeProviderError("Groq failed:", err));
+  } finally {
+    timeout.clear();
   }
-  const json = await resp.json();
-  return json.choices?.[0]?.message?.content || "I couldn't generate a response.";
 }
 
 async function callOpenRouter(messages) {
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
 
-  const formatted = [
-    { role: "system", content: getSystemPrompt() },
-    ...messages.map((m) => ({
-      role: m.role === "ai" ? "assistant" : "user",
-      content: m.content,
-    })),
-  ];
+  const timeout = withTimeout();
 
-  const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "google/gemma-3-27b-it:free",
-      messages: formatted,
-      max_tokens: 2048,
-      temperature: 0.7,
-    }),
-  });
+  try {
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      signal: timeout.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "http://localhost:8080",
+        "X-Title": "Nexus Compliance AI",
+      },
+      body: JSON.stringify({
+        model: "google/gemma-3-27b-it:free",
+        messages: toOpenAIMessages(messages),
+        max_tokens: 200,
+        temperature: MODEL_CONFIG.temperature,
+      }),
+    });
 
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`OpenRouter API error (${resp.status}): ${err}`);
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`OpenRouter API error (${resp.status}): ${err.slice(0, 500)}`);
+    }
+
+    const json = await resp.json();
+    const text = extractOpenAIText(json);
+    if (!text) throw new Error("OpenRouter returned an empty response");
+
+    return text;
+  } catch (err) {
+    throw new Error(normalizeProviderError("OpenRouter failed:", err));
+  } finally {
+    timeout.clear();
   }
-  const json = await resp.json();
-  return json.choices?.[0]?.message?.content || "I couldn't generate a response.";
 }
 
 // Cascading fallback: Gemini → Groq → OpenRouter
@@ -246,22 +331,26 @@ async function getAIResponse(messages) {
   ];
 
   const errors = [];
+
   for (const provider of providers) {
     if (!provider.key) {
       errors.push(`${provider.name}: API key not configured`);
       continue;
     }
+
     try {
       console.log(`🤖 Trying AI provider: ${provider.name}`);
-      const result = await provider.fn(messages);
+      const text = await provider.fn(messages);
       console.log(`✅ ${provider.name} responded successfully`);
-      return result;
+      return { text, provider: provider.name };
     } catch (err) {
-      console.warn(`⚠️ ${provider.name} failed: ${err.message}`);
-      errors.push(`${provider.name}: ${err.message}`);
+      const message = err?.message || "Unknown error";
+      console.warn(`⚠️ ${provider.name} failed: ${message}`);
+      errors.push(`${provider.name}: ${message}`);
     }
   }
-  throw new Error(`All AI providers failed:\n${errors.join("\n")}`);
+
+  throw new Error(errors.join(" | "));
 }
 
 // ---- Parse AI response for structured data ----
@@ -270,16 +359,19 @@ function parseResponse(text) {
   const actions = [];
   const lines = text.split("\n");
   let section = "";
+
   for (const line of lines) {
     const lower = line.toLowerCase();
     if (lower.includes("risk") && (lower.includes(":") || lower.includes("**"))) section = "risk";
     if (lower.includes("action") && (lower.includes(":") || lower.includes("**"))) section = "action";
+
     if (line.trim().startsWith("-") || line.trim().startsWith("•") || /^\d+\./.test(line.trim())) {
       const clean = line.replace(/^[\s\-•\d.]+/, "").trim();
       if (clean && section === "risk") risks.push(clean);
       else if (clean && section === "action") actions.push(clean);
     }
   }
+
   return { risks: risks.slice(0, 5), actions: actions.slice(0, 5) };
 }
 
@@ -291,31 +383,45 @@ router.get("/history", authenticate, (req, res) => {
 // POST /api/ai/message
 router.post("/message", authenticate, async (req, res) => {
   const { content } = req.body;
-  if (!content || !content.trim()) return res.status(400).json({ success: false, error: "Message content is required." });
+  if (!content || !content.trim()) {
+    return res.status(400).json({ success: false, error: "Message content is required." });
+  }
 
-  const userMsg = { id: store.generateId(), role: "user", content: content.trim(), timestamp: new Date().toISOString() };
+  const userMsg = {
+    id: store.generateId(),
+    role: "user",
+    content: content.trim(),
+    timestamp: new Date().toISOString(),
+  };
   store.chatHistory.push(userMsg);
 
   try {
-    const context = store.chatHistory.filter((m) => m.role === "user" || m.role === "ai").slice(-10);
-    const aiText = await getAIResponse(context);
+    const context = store.chatHistory
+      .filter((m) => m.role === "user" || m.role === "ai")
+      .slice(-10);
+
+    const { text: aiText, provider } = await getAIResponse(context);
     const { risks, actions } = parseResponse(aiText);
 
-    const aiMsg = { id: store.generateId(), role: "ai", content: aiText, risks, actions, timestamp: new Date().toISOString() };
-    store.chatHistory.push(aiMsg);
-    res.json({ success: true, data: aiMsg });
-  } catch (err) {
-    console.error("AI error:", err.message);
-    const fallback = {
+    const aiMsg = {
       id: store.generateId(),
       role: "ai",
-      content: `I'm currently unable to connect to any AI service. Please verify your API keys in the server/.env file.\n\nError details: ${err.message}\n\nIn the meantime, for compliance queries, I recommend checking the relevant government portals (GST Portal, MCA Portal, EPFO, ESIC) directly.`,
-      risks: ["All AI providers are currently unavailable"],
-      actions: ["Verify API keys in server/.env", "Check internet connectivity", "Try again in a few minutes"],
+      content: aiText,
+      risks,
+      actions,
+      provider,
       timestamp: new Date().toISOString(),
     };
-    store.chatHistory.push(fallback);
-    res.json({ success: true, data: fallback });
+
+    store.chatHistory.push(aiMsg);
+    return res.json({ success: true, data: aiMsg });
+  } catch (err) {
+    console.error("AI unavailable:", err?.message || err);
+    return res.status(503).json({
+      success: false,
+      error: "AI service currently not available.",
+      details: err?.message || "All providers failed",
+    });
   }
 });
 
