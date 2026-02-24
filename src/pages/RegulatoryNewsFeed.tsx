@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Newspaper, ExternalLink, X, Sparkles, Power, Clock, Tag, AlertTriangle, Shield } from "lucide-react";
+import { Newspaper, ExternalLink, X, Sparkles, Power, Clock, Tag, AlertTriangle, Shield, WifiOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 
@@ -16,17 +16,6 @@ interface Article {
   details: string;
 }
 
-const fallbackArticles: Article[] = [
-  { id: 1, title: "CBIC notifies revised GST return filing timelines for MSMEs", source: "Ministry of Finance", url: "#", publishedAt: "2026-02-15T08:30:00Z", category: "GST", impactLevel: "High", summary: "New quarterly filing option available for businesses with turnover below ₹5 crore.", details: "The Central Board of Indirect Taxes and Customs has issued Notification No. 12/2026 allowing MSMEs with annual turnover below ₹5 crore to file GST returns on a quarterly basis starting April 2026." },
-  { id: 2, title: "MCA mandates simplified annual return for small companies", source: "Ministry of Corporate Affairs", url: "#", publishedAt: "2026-02-14T14:00:00Z", category: "MCA", impactLevel: "Medium", summary: "Small companies can now file a simplified one-page annual return (Form AOC-4S).", details: "Companies with paid-up capital up to ₹4 crore and turnover up to ₹40 crore can use the new simplified annual return format." },
-  { id: 3, title: "ESIC coverage extended to establishments with 10+ employees", source: "Ministry of Labour & Employment", url: "#", publishedAt: "2026-02-14T10:15:00Z", category: "Labour", impactLevel: "High", summary: "ESIC threshold reduced from 20 to 10 employees across all states.", details: "The Ministry of Labour has notified a reduction in the ESIC applicability threshold from 20 to 10 employees, effective from April 1, 2026." },
-  { id: 4, title: "SEBI circular on enhanced disclosure norms for listed MSMEs", source: "Securities and Exchange Board of India", url: "#", publishedAt: "2026-02-13T16:45:00Z", category: "SEBI", impactLevel: "Medium", summary: "Listed MSMEs must now disclose related party transactions quarterly.", details: "SEBI has issued Circular SEBI/HO/CFD/CMD1/CIR/2026/15 mandating quarterly disclosure of all related party transactions exceeding ₹1 crore." },
-  { id: 5, title: "New environmental compliance norms for manufacturing MSMEs", source: "Ministry of Environment", url: "#", publishedAt: "2026-02-13T09:00:00Z", category: "Environmental", impactLevel: "Medium", summary: "Small manufacturing units now require Consent to Operate renewal every 3 years.", details: "The Central Pollution Control Board has revised the consent renewal cycle for 'Green' and 'Orange' category industries from 5 years to 3 years." },
-  { id: 6, title: "EPF interest rate revised to 8.25% for FY 2025-26", source: "Employees' Provident Fund Organisation", url: "#", publishedAt: "2026-02-12T12:30:00Z", category: "Labour", impactLevel: "Low", summary: "EPFO declares 8.25% interest on PF deposits for the current financial year.", details: "The Central Board of Trustees of EPFO has approved an interest rate of 8.25% for the financial year 2025-26." },
-  { id: 7, title: "RBI updates KYC requirements for NBFC-MFIs", source: "Reserve Bank of India", url: "#", publishedAt: "2026-02-12T08:00:00Z", category: "Financial", impactLevel: "High", summary: "Video KYC now mandatory for all loans above ₹50,000 issued by NBFC-MFIs.", details: "RBI Master Direction RBI/2026-27/12 requires all NBFC-MFIs to conduct video-based KYC for loans exceeding ₹50,000." },
-  { id: 8, title: "GST Council recommends input tax credit simplification", source: "GST Council", url: "#", publishedAt: "2026-02-11T15:00:00Z", category: "GST", impactLevel: "High", summary: "Auto-populated ITC from GSTR-2B to become sole basis for credit claims from April 2026.", details: "The 58th GST Council meeting recommended that input tax credit claims be solely based on auto-populated data in GSTR-2B." },
-];
-
 const impactConfig = {
   High: { class: "status-red", icon: AlertTriangle },
   Medium: { class: "status-yellow", icon: Shield },
@@ -40,6 +29,8 @@ const categoryColors: Record<string, string> = {
   SEBI: "bg-destructive/15 text-destructive",
   Environmental: "bg-success/15 text-success",
   Financial: "bg-primary/15 text-primary",
+  General: "bg-secondary text-secondary-foreground",
+  Tax: "bg-accent/15 text-accent",
 };
 
 function timeAgo(dateStr: string) {
@@ -56,26 +47,36 @@ const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
 export default function RegulatoryNewsFeed() {
   const [enabled, setEnabled] = useState(false);
-  const [articles, setArticles] = useState<Article[]>(fallbackArticles);
+  const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [filter, setFilter] = useState<string>("All");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch from backend when enabled
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setArticles([]);
+      setError(null);
+      return;
+    }
     setLoading(true);
+    setError(null);
     const query = filter !== "All" ? `?category=${encodeURIComponent(filter)}` : "";
     api.get<Article[]>(`/news${query}`)
       .then(res => {
         if (res.success && res.data && res.data.length > 0) {
           setArticles(res.data);
+          setError(null);
         } else {
-          setArticles(fallbackArticles);
+          setArticles([]);
+          setError("No news articles found. The Event Registry API may not have returned results for the current filters.");
         }
       })
-      .catch(() => {
-        setArticles(fallbackArticles);
+      .catch((err: unknown) => {
+        setArticles([]);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setError(`News service is currently unavailable. ${msg}`);
       })
       .finally(() => setLoading(false));
   }, [enabled, filter]);
@@ -102,10 +103,16 @@ export default function RegulatoryNewsFeed() {
             <span className="text-sm font-medium text-foreground">Live Feed</span>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
-          {enabled && (
+          {enabled && !error && articles.length > 0 && (
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
               <span className="text-[10px] text-success font-semibold">LIVE</span>
+            </span>
+          )}
+          {enabled && error && (
+            <span className="flex items-center gap-1.5">
+              <WifiOff className="h-3 w-3 text-destructive" />
+              <span className="text-[10px] text-destructive font-semibold">OFFLINE</span>
             </span>
           )}
         </div>
@@ -127,35 +134,55 @@ export default function RegulatoryNewsFeed() {
       {/* Enabled state */}
       {enabled && (
         <>
-          {/* Category filter */}
-          <motion.div variants={item} className="flex flex-wrap gap-2">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  filter === cat
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-muted"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </motion.div>
+          {/* Error state */}
+          {error && !loading && (
+            <motion.div variants={item} className="glass-card p-8 text-center border border-destructive/20 bg-destructive/5">
+              <div className="h-14 w-14 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                <WifiOff className="h-7 w-7 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">News Service Unavailable</h3>
+              <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-4">{error}</p>
+              <p className="text-xs text-muted-foreground">
+                Ensure the backend server is running: <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">cd server && npm run dev</code>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                And that <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">EVENTREGISTRY_API_KEY</code> is set in <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">server/.env</code>
+              </p>
+            </motion.div>
+          )}
+
+          {/* Category filter — only show when we have articles */}
+          {articles.length > 0 && (
+            <motion.div variants={item} className="flex flex-wrap gap-2">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setFilter(cat)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    filter === cat
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground hover:bg-muted"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </motion.div>
+          )}
 
           {/* Loading */}
           {loading && (
-            <div className="flex justify-center py-8">
-              <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">Fetching live regulatory news...</p>
             </div>
           )}
 
           {/* Articles grid */}
-          {!loading && (
+          {!loading && !error && articles.length > 0 && (
             <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {filtered.map(article => {
-                const impact = impactConfig[article.impactLevel];
+                const impact = impactConfig[article.impactLevel] || impactConfig.Low;
                 return (
                   <motion.div
                     key={article.id}
@@ -223,7 +250,7 @@ export default function RegulatoryNewsFeed() {
                 <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${categoryColors[selectedArticle.category] || "bg-secondary text-secondary-foreground"}`}>
                   {selectedArticle.category}
                 </span>
-                <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${impactConfig[selectedArticle.impactLevel].class}`}>
+                <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${(impactConfig[selectedArticle.impactLevel] || impactConfig.Low).class}`}>
                   {selectedArticle.impactLevel} Impact
                 </span>
               </div>

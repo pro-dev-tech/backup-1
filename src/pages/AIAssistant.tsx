@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Send, Download, Sparkles, AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
+import { Bot, Send, Download, Sparkles, AlertTriangle, CheckCircle, Trash2, WifiOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -8,6 +8,7 @@ interface Message {
   content: string;
   risks?: string[];
   actions?: string[];
+  isError?: boolean;
 }
 
 const examplePrompts = [
@@ -24,50 +25,27 @@ const initialMessages: Message[] = [
   },
 ];
 
-// Fallback mock responses (used when backend is unavailable)
-function getMockResponse(text: string): Message {
-  const lower = text.toLowerCase();
-  if (lower.includes("gst")) {
-    return {
-      role: "ai",
-      content: "The latest GST amendment (Notification No. 12/2026) introduces simplified return filing for MSMEs with turnover below ₹5 Cr. Key changes include:\n\n1. **Quarterly GSTR-3B** filing instead of monthly\n2. **Auto-populated GSTR-2A** for input tax credit\n3. **Reduced late fees** from ₹50/day to ₹20/day\n\nEffective from April 1, 2026. Your company qualifies for these simplified provisions.",
-      risks: ["Late filing penalty: ₹20/day under new rules", "Input credit mismatch risk if vendors don't file"],
-      actions: ["Opt-in for quarterly filing on GST portal", "Verify vendor compliance", "Update accounting software"],
-    };
-  }
-  if (lower.includes("karnataka") || lower.includes("employee")) {
-    return {
-      role: "ai",
-      content: "For a company with 35 employees operating in Karnataka, the following compliances are applicable:\n\n1. **Provident Fund (PF)** — Mandatory (>20 employees)\n2. **ESIC** — Applicable for employees earning ≤₹21,000/month\n3. **Professional Tax** — Karnataka-specific, monthly deduction\n4. **Shops & Establishment Act** — Karnataka State registration\n5. **GST** — Based on turnover threshold\n6. **Labour Welfare Fund** — Annual contribution",
-      risks: ["PF Return overdue — ₹5,000/day penalty risk", "ESIC threshold change may affect 8 employees"],
-      actions: ["File PF Return immediately", "Review ESIC applicability", "Schedule GST-3B preparation"],
-    };
-  }
-  return {
-    role: "ai",
-    content: "Based on your company profile and current regulatory landscape, here's my analysis:\n\n**Current Status:** Your compliance score is 82/100, which is above the industry average of 74.\n\n**Key Recommendations:**\n1. Address the overdue PF return immediately to avoid penalties\n2. Review the new ESIC threshold changes for Karnataka\n3. Prepare for upcoming GST-3B filing deadline on Feb 20",
-    risks: ["PF Return overdue — ₹5,000/day penalty risk", "ESIC threshold change may affect 8 employees"],
-    actions: ["File PF Return immediately", "Review ESIC applicability", "Schedule GST-3B preparation"],
-  };
-}
-
 export default function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Load chat history from backend on mount
+  // Check backend & load chat history on mount
   useEffect(() => {
     api.get<Message[]>("/ai/history")
       .then(res => {
+        setBackendAvailable(true);
         if (res.success && res.data && res.data.length > 0) {
           setMessages(res.data.map(m => ({ role: m.role, content: m.content, risks: m.risks, actions: m.actions })));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setBackendAvailable(false);
+      });
   }, []);
 
   const sendMessage = async (text: string) => {
@@ -80,6 +58,7 @@ export default function AIAssistant() {
     try {
       const res = await api.post<Message>("/ai/message", { content: text });
       if (res.success && res.data) {
+        setBackendAvailable(true);
         setMessages(prev => [...prev, {
           role: "ai",
           content: res.data.content,
@@ -87,12 +66,16 @@ export default function AIAssistant() {
           actions: res.data.actions,
         }]);
       } else {
-        throw new Error("No response");
+        throw new Error(res.error || "No response from AI service");
       }
-    } catch {
-      // Fallback to mock if backend is unavailable
-      await new Promise(r => setTimeout(r, 1000));
-      setMessages(prev => [...prev, getMockResponse(text)]);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setBackendAvailable(false);
+      setMessages(prev => [...prev, {
+        role: "ai",
+        content: `⚠️ **AI service is currently unavailable.**\n\n${errorMessage}\n\nPlease ensure the backend server is running:\n\`cd server && npm run dev\`\n\nIf the server is running, check that your API keys (GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY) are properly configured in \`server/.env\`.`,
+        isError: true,
+      }]);
     } finally {
       setTyping(false);
     }
@@ -115,13 +98,25 @@ export default function AIAssistant() {
             <p className="text-xs text-muted-foreground">Powered by regulatory intelligence engine</p>
           </div>
         </div>
-        <button
-          onClick={clearChat}
-          className="rounded-lg border border-border p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-          title="Clear chat history"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {backendAvailable === false && (
+            <span className="flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-[10px] font-semibold text-destructive">
+              <WifiOff className="h-3 w-3" /> Backend Offline
+            </span>
+          )}
+          {backendAvailable === true && (
+            <span className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-[10px] font-semibold text-success">
+              <span className="h-2 w-2 rounded-full bg-success animate-pulse" /> Connected
+            </span>
+          )}
+          <button
+            onClick={clearChat}
+            className="rounded-lg border border-border p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Clear chat history"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Chat area */}
@@ -137,10 +132,14 @@ export default function AIAssistant() {
               <div className={`max-w-[80%] rounded-xl p-4 text-sm ${
                 msg.role === "user"
                   ? "gradient-primary text-primary-foreground"
-                  : "glass-card"
+                  : msg.isError
+                    ? "border border-destructive/30 bg-destructive/5"
+                    : "glass-card"
               }`}>
                 <div className="whitespace-pre-wrap text-sm leading-relaxed" dangerouslySetInnerHTML={{
-                  __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
+                  __html: msg.content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
+                    .replace(/`(.*?)`/g, '<code class="bg-secondary px-1 py-0.5 rounded text-xs">$1</code>')
                 }} />
 
                 {msg.risks && msg.risks.length > 0 && (
