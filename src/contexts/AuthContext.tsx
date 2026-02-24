@@ -20,22 +20,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const DEMO_ADMIN: User = {
-  id: "usr-001",
-  firstName: "Admin",
-  lastName: "Name",
-  email: "rahul@acmepvt.com",
-  phone: "+91 98765 43210",
-  company: {
-    name: "Acme Pvt Ltd",
-    gstin: "27AABCU9603R1ZX",
-    cin: "U72200MH2020PTC123456",
-    state: "Maharashtra",
-    employees: "35",
-  },
-  role: "admin",
-  createdAt: "2025-06-15T10:00:00Z",
-};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
@@ -60,55 +44,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("cai_managed_users", JSON.stringify(managedUsers));
   }, [managedUsers]);
 
-  // Try backend auth first, fallback to demo mode
-  const login = useCallback(async (email: string, _password: string, loginRole: UserRole): Promise<boolean> => {
+  // Validate persisted session on app load to avoid stale/invalid tokens
+  useEffect(() => {
+    let mounted = true;
+
+    const validateSession = async () => {
+      const savedToken = localStorage.getItem("cai_auth_token");
+      if (!savedToken || !user) return;
+
+      try {
+        const res = await api.get<{ user: User }>("/auth/session");
+        if (mounted && res.success && res.data?.user) {
+          setUser(res.data.user);
+        }
+      } catch {
+        if (mounted) {
+          setUser(null);
+          clearToken();
+          localStorage.removeItem("cai_auth_user");
+        }
+      }
+    };
+
+    validateSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Backend-only auth (no frontend demo fallback)
+  const login = useCallback(async (email: string, password: string, loginRole: UserRole): Promise<boolean> => {
     try {
       const res = await api.post<{ user: User; token: string }>("/auth/login", {
         email,
-        password: _password,
+        password,
         role: loginRole,
       });
-      if (res.success && res.data) {
-        const userData = { ...res.data.user, role: loginRole };
-        setUser(userData);
-        setToken(res.data.token);
-        return true;
-      }
-    } catch {
-      // Backend unavailable – fall back to demo mode
-      console.info("Backend unavailable, using demo auth");
-    }
 
-    // Demo fallback (works without backend)
-    if (loginRole === "admin") {
-      setUser({ ...DEMO_ADMIN, email });
-    } else {
-      const managed = managedUsers.find(u => u.email === email && u.role === loginRole && u.active);
-      if (managed) {
-        setUser({
-          id: managed.id,
-          firstName: managed.firstName,
-          lastName: managed.lastName,
-          email: managed.email,
-          phone: managed.phone,
-          company: DEMO_ADMIN.company,
-          role: managed.role,
-          createdAt: managed.createdAt,
-        });
-      } else {
-        setUser({
-          ...DEMO_ADMIN,
-          email,
-          role: loginRole,
-          firstName: loginRole === "finance" ? "Finance" : "Auditor",
-          lastName: "User",
-        });
-      }
+      if (!res.success || !res.data?.token) return false;
+
+      const userData = { ...res.data.user, role: loginRole };
+      setUser(userData);
+      setToken(res.data.token);
+      return true;
+    } catch {
+      clearToken();
+      return false;
     }
-    const token = `tok_${Date.now()}`;
-    setToken(token);
-    return true;
-  }, [managedUsers]);
+  }, []);
 
   const register = useCallback(async (data: any): Promise<boolean> => {
     try {
@@ -120,19 +103,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         phone: data.phone,
         companyName: data.companyName,
       });
-      if (res.success && res.data) {
-        setUser(res.data.user);
-        setToken(res.data.token);
-        return true;
-      }
-    } catch {
-      console.info("Backend unavailable, using demo registration");
-    }
 
-    // Demo fallback
-    setUser({ ...DEMO_ADMIN, ...data });
-    setToken(`tok_${Date.now()}`);
-    return true;
+      if (!res.success || !res.data?.token) return false;
+
+      setUser(res.data.user);
+      setToken(res.data.token);
+      return true;
+    } catch {
+      clearToken();
+      return false;
+    }
   }, []);
 
   const logout = useCallback(() => {
