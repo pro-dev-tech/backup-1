@@ -20,4 +20,8 @@ module.exports = {
 
   // News – Event Registry (newsapi.ai)
   EVENTREGISTRY_API_KEY: clean(process.env.EVENTREGISTRY_API_KEY),
+
+  // Compliance AI Engine (separate from AI Assistant)
+  COMPLIANCE_GROQ_API_KEY: clean(process.env.COMPLIANCE_GROQ_API_KEY) || clean(process.env.GROQ_API_KEY),
+  COMPLIANCE_OPENROUTER_API_KEY: clean(process.env.COMPLIANCE_OPENROUTER_API_KEY) || clean(process.env.OPENROUTER_API_KEY),
 };

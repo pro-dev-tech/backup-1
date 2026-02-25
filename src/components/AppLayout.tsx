@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { api } from "@/lib/api";
 import {
   LayoutDashboard, Calendar, ShieldAlert, Bot, Plug, FileBarChart,
   Settings, Bell, ChevronDown, Shield, Lock, ClipboardList, Newspaper,
@@ -47,8 +48,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [companyOpen, setCompanyOpen] = useState(false);
   const [notifications, setNotifications] = useState(demoNotifications);
+  const [dynamicScore, setDynamicScore] = useState<{ score: number; hasData: boolean }>({ score: 0, hasData: false });
+
+  const fetchScore = useCallback(async () => {
+    try {
+      const r = await api.get<any>("/integrations/score");
+      setDynamicScore(r.data);
+    } catch { }
+  }, []);
 
   useEffect(() => {
+    if (isAuthenticated) fetchScore();
+  }, [isAuthenticated, location.pathname, fetchScore]);
     if (!isAuthenticated) navigate("/login", { replace: true });
   }, [isAuthenticated, navigate]);
 
@@ -216,9 +227,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2 md:gap-3">
             {/* Risk score badge */}
-            <div className="hidden sm:flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+            <div className={`hidden sm:flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              dynamicScore.hasData
+                ? dynamicScore.score >= 80 ? "border-success/30 bg-success/10 text-success"
+                  : dynamicScore.score >= 50 ? "border-warning/30 bg-warning/10 text-warning"
+                  : "border-destructive/30 bg-destructive/10 text-destructive"
+                : "border-border bg-secondary text-muted-foreground"
+            }`}>
               <Shield className="h-3.5 w-3.5" />
-              Risk Score: 82/100
+              {dynamicScore.hasData ? `Score: ${dynamicScore.score}/100` : "No Evaluations"}
             </div>
 
             {/* Theme toggle */}
