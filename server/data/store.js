@@ -149,6 +149,10 @@ const fallbackArticles = [
   { id: 7, title: "RBI updates KYC requirements for NBFC-MFIs", source: "RBI", url: "#", publishedAt: "2026-02-12T08:00:00Z", category: "Financial", impactLevel: "High", summary: "Video KYC now mandatory for all loans above ₹50,000 issued by NBFC-MFIs.", details: "RBI Master Direction RBI/2026-27/12." },
   { id: 8, title: "GST Council recommends input tax credit simplification", source: "GST Council", url: "#", publishedAt: "2026-02-11T15:00:00Z", category: "GST", impactLevel: "High", summary: "Auto-populated ITC from GSTR-2B to become sole basis for credit claims.", details: "58th GST Council meeting recommendation, effective April 2026." },
 ];
+// ---- Rule Engine State (dynamic) ----
+const violations = [];
+const auditTrail = [];
+const platformEvaluations = {};
 
 module.exports = {
   users,
@@ -161,5 +165,8 @@ module.exports = {
   settings,
   chatHistory,
   fallbackArticles,
+  violations,
+  auditTrail,
+  platformEvaluations,
   generateId: () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
 };

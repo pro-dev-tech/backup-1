@@ -36,6 +36,8 @@ app.use("/api/integrations", require("./routes/integrations"));
 app.use("/api/news", require("./routes/news"));
 app.use("/api/ai", require("./routes/aiAssistant"));
 app.use("/api/settings", require("./routes/settings"));
+app.use("/api/compliance-ai", aiLimiter);
+app.use("/api/compliance-ai", require("./routes/complianceAI"));
 
 // ---- Serve Frontend (production) ----
 const distPath = path.join(__dirname, "..", "dist");
