@@ -425,6 +425,65 @@ router.post("/message", authenticate, async (req, res) => {
   }
 });
 
+// POST /api/ai/stream – SSE streaming word-by-word
+router.post("/stream", authenticate, async (req, res) => {
+  const { content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ success: false, error: "Message content is required." });
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const userMsg = {
+    id: store.generateId(),
+    role: "user",
+    content: content.trim(),
+    timestamp: new Date().toISOString(),
+  };
+  store.chatHistory.push(userMsg);
+
+  try {
+    const context = store.chatHistory
+      .filter((m) => m.role === "user" || m.role === "ai")
+      .slice(-10);
+
+    const { text: aiText, provider } = await getAIResponse(context);
+    const { risks, actions } = parseResponse(aiText);
+
+    // Stream word by word
+    const words = aiText.split(/(\s+)/);
+    for (let i = 0; i < words.length; i++) {
+      res.write(`data: ${JSON.stringify({ word: words[i] })}\n\n`);
+      if (i % 3 === 0) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    }
+
+    // Send metadata
+    res.write(`data: ${JSON.stringify({ risks, actions, provider })}\n\n`);
+    res.write("data: [DONE]\n\n");
+
+    store.chatHistory.push({
+      id: store.generateId(),
+      role: "ai",
+      content: aiText,
+      risks,
+      actions,
+      provider,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ error: err?.message || "AI service unavailable" })}\n\n`);
+    res.write("data: [DONE]\n\n");
+  }
+
+  res.end();
+});
+
 // DELETE /api/ai/history
 router.delete("/history", authenticate, (req, res) => {
   store.chatHistory.length = 0;

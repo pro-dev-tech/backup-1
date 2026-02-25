@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Building, Bell, Shield, Palette, ChevronRight, Save, Check, Users } from "lucide-react";
+import { User, Building, Bell, Shield, Palette, ChevronRight, Save, Check, Users, Bot, Vault } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import ManageUsers from "@/components/ManageUsers";
 import RoleGuard from "@/components/RoleGuard";
 
-interface Section { id: string; icon: React.ElementType; title: string; description: string; adminOnly?: boolean }
+interface Section { id: string; icon: React.ElementType; title: string; description: string; adminOnly?: boolean; noAuditor?: boolean }
 
 const sections: Section[] = [
   { id: "profile", icon: User, title: "Profile", description: "Manage your personal information" },
@@ -17,13 +18,16 @@ const sections: Section[] = [
   { id: "manage-users", icon: Users, title: "Manage Users", description: "Add or remove team members", adminOnly: true },
   { id: "notifications", icon: Bell, title: "Notifications", description: "Configure alert preferences" },
   { id: "security", icon: Shield, title: "Security", description: "Password, 2FA, and session management" },
+  { id: "ai-assistant", icon: Bot, title: "AI Assistant", description: "Configure floating assistant preferences" },
+  { id: "secure-vault", icon: Vault, title: "Secure Vault", description: "Access encrypted document storage", noAuditor: true },
   { id: "appearance", icon: Palette, title: "Appearance", description: "Theme and display preferences" },
 ];
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
-  const { profile, setProfile, company, setCompany, accentColor, setAccentColor, accentPresets } = useSettings();
+  const { profile, setProfile, company, setCompany, accentColor, setAccentColor, accentPresets, showFloatingAI, setShowFloatingAI } = useSettings();
   const { role, hasPermission } = useAuth();
   const { toast } = useToast();
 
@@ -34,11 +38,18 @@ export default function SettingsPage() {
     toast({ title: "Settings saved", description: `${section} settings updated successfully.`, variant: "success" });
   };
 
-  const toggle = (id: string) => setActiveSection(activeSection === id ? null : id);
+  const toggle = (id: string) => {
+    if (id === "secure-vault") {
+      navigate("/secure-vault");
+      return;
+    }
+    setActiveSection(activeSection === id ? null : id);
+  };
 
   // Filter sections based on role
   const visibleSections = sections.filter(s => {
     if (s.adminOnly && role !== "admin") return false;
+    if (s.noAuditor && role === "auditor") return false;
     return true;
   });
 
@@ -195,6 +206,34 @@ export default function SettingsPage() {
             </div>
           </RoleGuard>
         );
+      case "ai-assistant":
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-secondary/50 p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Floating AI Assistant</p>
+                <p className="text-xs text-muted-foreground">Show the floating AI chat icon on all pages</p>
+              </div>
+              <Switch
+                checked={showFloatingAI}
+                onCheckedChange={(checked) => {
+                  setShowFloatingAI(checked);
+                  toast({
+                    title: checked ? "Floating AI Enabled" : "Floating AI Disabled",
+                    description: checked ? "The AI assistant icon will appear on all pages." : "The floating AI icon has been hidden.",
+                    variant: "success",
+                  });
+                }}
+              />
+            </div>
+            <div className="rounded-lg bg-secondary/50 p-4">
+              <p className="text-sm font-medium text-foreground mb-1">Chat Memory</p>
+              <p className="text-xs text-muted-foreground">Chat history is shared between the main AI Assistant page and the floating widget. Messages persist until you log out or clear the chat.</p>
+            </div>
+          </div>
+        );
+      case "secure-vault":
+        return null; // Navigates away
       case "appearance":
         return (
           <div className="space-y-4">

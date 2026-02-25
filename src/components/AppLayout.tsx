@@ -3,13 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, ShieldAlert, Bot, Plug, FileBarChart,
   Settings, Bell, ChevronDown, Shield, Lock, ClipboardList, Newspaper,
-  Menu, X, LogOut, Sun, Moon, Check
+  Menu, X, LogOut, Sun, Moon, Check, Vault
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import FloatingAIAssistant from "@/components/FloatingAIAssistant";
 
 const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -20,6 +21,7 @@ const navItems = [
   { title: "AI Assistant", icon: Bot, path: "/ai-assistant" },
   { title: "Integrations", icon: Plug, path: "/integrations" },
   { title: "Reports", icon: FileBarChart, path: "/reports" },
+  { title: "Secure Vault", icon: Vault, path: "/secure-vault" },
   { title: "Settings", icon: Settings, path: "/settings" },
 ];
 
@@ -37,7 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const { profile, company } = useSettings();
+  const { profile, company, showFloatingAI } = useSettings();
   const { user, role, logout, isAuthenticated } = useAuth();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -326,6 +328,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Floating AI Assistant */}
+      {showFloatingAI && location.pathname !== "/ai-assistant" && <FloatingAIAssistant />}
     </div>
   );
 }

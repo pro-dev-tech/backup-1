@@ -36,6 +36,8 @@ interface SettingsContextType {
   accentColor: string;
   setAccentColor: (hsl: string) => void;
   accentPresets: AccentColor[];
+  showFloatingAI: boolean;
+  setShowFloatingAI: (show: boolean) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -60,6 +62,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return localStorage.getItem("accent-color") || "220 90% 56%";
   });
 
+  const [showFloatingAI, setShowFloatingAIState] = useState(() => {
+    const saved = localStorage.getItem("show-floating-ai");
+    return saved !== null ? saved === "true" : true; // default enabled
+  });
+
   const setAccentColor = useCallback((hsl: string) => {
     setAccentColorState(hsl);
     localStorage.setItem("accent-color", hsl);
@@ -68,6 +75,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--ring", hsl);
     root.style.setProperty("--sidebar-primary", hsl);
     root.style.setProperty("--sidebar-ring", hsl);
+  }, []);
+
+  const setShowFloatingAI = useCallback((show: boolean) => {
+    setShowFloatingAIState(show);
+    localStorage.setItem("show-floating-ai", String(show));
   }, []);
 
   // Apply saved accent on mount
@@ -83,7 +95,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <SettingsContext.Provider value={{ profile, setProfile, company, setCompany, accentColor, setAccentColor, accentPresets }}>
+    <SettingsContext.Provider value={{ profile, setProfile, company, setCompany, accentColor, setAccentColor, accentPresets, showFloatingAI, setShowFloatingAI }}>
       {children}
     </SettingsContext.Provider>
   );
