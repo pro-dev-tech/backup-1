@@ -1,15 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Send, Download, Sparkles, AlertTriangle, CheckCircle, Trash2, WifiOff } from "lucide-react";
+import { Bot, Send, Download, Sparkles, AlertTriangle, CheckCircle, Trash2, WifiOff, Mic, MicOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { api } from "@/lib/api";
+import { useChat } from "@/contexts/ChatContext";
+import { renderMarkdown } from "@/lib/markdown";
 
-interface Message {
-  role: "user" | "ai";
-  content: string;
-  risks?: string[];
-  actions?: string[];
-  isError?: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SpeechRecognitionAPI = typeof window !== "undefined" ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition : null;
 
 const examplePrompts = [
   "When is my next GST filing deadline?",
@@ -18,72 +14,54 @@ const examplePrompts = [
   "Summarize my compliance status",
 ];
 
-const initialMessages: Message[] = [
-  {
-    role: "ai",
-    content: "Hello! I'm your AI Compliance Assistant. I can help you understand regulations, draft responses, and identify applicable compliances for your MSME. How can I help you today?",
-  },
-];
-
 export default function AIAssistant() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { messages, sendMessage, clearChat, isTyping, backendAvailable } = useChat();
   const [input, setInput] = useState("");
-  const [typing, setTyping] = useState(false);
-  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [listening, setListening] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Check backend & load chat history on mount
-  useEffect(() => {
-    api.get<Message[]>("/ai/history")
-      .then(res => {
-        setBackendAvailable(true);
-        if (res.success && res.data && res.data.length > 0) {
-          setMessages(res.data.map(m => ({ role: m.role, content: m.content, risks: m.risks, actions: m.actions })));
-        }
-      })
-      .catch(() => {
-        setBackendAvailable(false);
-      });
-  }, []);
-
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || typing) return;
-    const userMsg: Message = { role: "user", content: text };
-    setMessages(prev => [...prev, userMsg]);
+  const handleSend = (text: string) => {
+    if (!text.trim() || isTyping) return;
     setInput("");
-    setTyping(true);
-
-    try {
-      const res = await api.post<Message>("/ai/message", { content: text });
-      if (res.success && res.data) {
-        setBackendAvailable(true);
-        setMessages(prev => [...prev, {
-          role: "ai",
-          content: res.data.content,
-          risks: res.data.risks,
-          actions: res.data.actions,
-        }]);
-      } else {
-        throw new Error(res.error || "No response from AI service");
-      }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setBackendAvailable(false);
-      setMessages(prev => [...prev, {
-        role: "ai",
-        content: `⚠️ **AI service is currently unavailable.**\n\n${errorMessage}\n\nPlease ensure the backend server is running:\n\`cd server && npm run dev\`\n\nIf the server is running, check that your API keys (GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY) are properly configured in \`server/.env\`.`,
-        isError: true,
-      }]);
-    } finally {
-      setTyping(false);
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
     }
+    sendMessage(text);
   };
 
-  const clearChat = async () => {
-    setMessages(initialMessages);
-    api.delete("/ai/history").catch(() => {});
+  const toggleVoice = () => {
+    if (!SpeechRecognitionAPI) return;
+
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-IN";
+
+    recognition.onresult = (event: { results: { [x: string]: { [x: string]: { transcript: string } } }; resultIndex: number }) => {
+      let transcript = "";
+      for (let i = 0; i < Object.keys(event.results).length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setInput(transcript);
+    };
+
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
   };
 
   return (
@@ -136,11 +114,17 @@ export default function AIAssistant() {
                     ? "border border-destructive/30 bg-destructive/5"
                     : "glass-card"
               }`}>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed" dangerouslySetInnerHTML={{
-                  __html: msg.content
-                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
-                    .replace(/`(.*?)`/g, '<code class="bg-secondary px-1 py-0.5 rounded text-xs">$1</code>')
-                }} />
+                <div
+                  className="text-sm leading-relaxed [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-3 [&_h4]:mb-1 [&_pre]:my-2 [&_li]:my-0.5 [&_a]:text-primary [&_a]:underline"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                />
+                {msg.isStreaming && (
+                  <motion.span
+                    className="inline-block w-2 h-4 bg-primary ml-0.5"
+                    animate={{ opacity: [1, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
+                  />
+                )}
 
                 {msg.risks && msg.risks.length > 0 && (
                   <div className="mt-3 space-y-1.5 border-t border-border pt-3">
@@ -167,7 +151,7 @@ export default function AIAssistant() {
           ))}
         </AnimatePresence>
 
-        {typing && (
+        {isTyping && !messages.some(m => m.isStreaming) && (
           <div className="flex gap-1 px-4 py-3">
             {[0, 1, 2].map((i) => (
               <motion.div
@@ -187,7 +171,7 @@ export default function AIAssistant() {
         {examplePrompts.map((p, i) => (
           <button
             key={i}
-            onClick={() => sendMessage(p)}
+            onClick={() => handleSend(p)}
             className="rounded-full border border-border bg-secondary px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all flex items-center gap-1.5"
           >
             <Sparkles className="h-3 w-3 text-primary" /> {p}
@@ -200,13 +184,26 @@ export default function AIAssistant() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend(input)}
           placeholder="Ask about any compliance requirement..."
           className="flex-1 rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
         />
+        {SpeechRecognitionAPI && (
+          <button
+            onClick={toggleVoice}
+            className={`rounded-xl px-3 py-3 transition-all ${
+              listening
+                ? "bg-destructive/10 text-destructive border border-destructive/30 animate-pulse"
+                : "border border-border text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+            title={listening ? "Stop listening" : "Voice input"}
+          >
+            {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+        )}
         <button
-          onClick={() => sendMessage(input)}
-          disabled={typing}
+          onClick={() => handleSend(input)}
+          disabled={isTyping}
           className="rounded-xl gradient-primary px-4 py-3 text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           <Send className="h-5 w-5" />
