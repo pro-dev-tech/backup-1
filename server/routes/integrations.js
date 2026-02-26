@@ -1,6 +1,6 @@
 // ============================================
 // Integrations Routes – Platform management, file upload, rule evaluation
-// Replaces mock connect/disconnect with real rule engine evaluation
+// Supports CSV, JSON, PDF (via AI parsing), XML, and all compliance docs
 // ============================================
 
 const router = require("express").Router();
@@ -9,21 +9,21 @@ const store = require("../data/store");
 const { runRuleEngine, getComplianceScore, generateCalendarSuggestions } = require("../engine/ruleEngine");
 
 const platforms = [
-  { id: "gstn", name: "GSTN", description: "GST Network Portal – Tax filing & returns", apiStatus: "restricted", icon: "G", category: "Tax", acceptedFormats: ["JSON", "CSV"],
+  { id: "gstn", name: "GSTN", description: "GST Network Portal – Tax filing & returns", apiStatus: "restricted", icon: "G", category: "Tax", acceptedFormats: ["JSON", "CSV", "PDF"],
     sampleFields: ["tax_collected", "tax_reported", "filing_date", "due_date", "input_tax_credit", "allowed_itc_threshold"] },
-  { id: "mca21", name: "MCA21", description: "Ministry of Corporate Affairs – Company filings", apiStatus: "unavailable", icon: "M", category: "Corporate", acceptedFormats: ["JSON"],
+  { id: "mca21", name: "MCA21", description: "Ministry of Corporate Affairs – Company filings", apiStatus: "unavailable", icon: "M", category: "Corporate", acceptedFormats: ["JSON", "CSV", "PDF"],
     sampleFields: ["annual_return_filed", "filing_date", "statutory_deadline", "director_kyc_expiry", "incorporation_filing_missing"] },
-  { id: "epfo", name: "EPFO", description: "Provident Fund Portal – ECR & payroll", apiStatus: "unavailable", icon: "E", category: "Labour", acceptedFormats: ["CSV", "JSON"],
+  { id: "epfo", name: "EPFO", description: "Provident Fund Portal – ECR & payroll", apiStatus: "unavailable", icon: "E", category: "Labour", acceptedFormats: ["CSV", "JSON", "PDF"],
     sampleFields: ["pf_deduction_percent", "employer_contribution", "expected_contribution", "deposit_date", "due_date"] },
-  { id: "tally", name: "TallyPrime", description: "Accounting & Bookkeeping – Ledger data", apiStatus: "local", icon: "T", category: "Accounting", acceptedFormats: ["XML", "CSV", "JSON"],
+  { id: "tally", name: "TallyPrime", description: "Accounting & Bookkeeping – Ledger data", apiStatus: "local", icon: "T", category: "Accounting", acceptedFormats: ["XML", "CSV", "JSON", "PDF"],
     sampleFields: ["gst_ledger_mapped", "unclassified_transactions", "missing_tax_category"] },
-  { id: "zoho", name: "Zoho Books", description: "Invoice Management – Tax & billing", apiStatus: "available", icon: "Z", category: "Accounting", acceptedFormats: ["CSV", "JSON"],
+  { id: "zoho", name: "Zoho Books", description: "Invoice Management – Tax & billing", apiStatus: "available", icon: "Z", category: "Accounting", acceptedFormats: ["CSV", "JSON", "PDF"],
     sampleFields: ["tax_collected", "invoice_tax_total", "duplicate_invoices", "invalid_gst_rates"] },
-  { id: "rbi", name: "RBI Circulars", description: "Reserve Bank of India – Regulatory circulars", apiStatus: "unavailable", icon: "R", category: "Financial", acceptedFormats: ["JSON"],
+  { id: "rbi", name: "RBI Circulars", description: "Reserve Bank of India – Regulatory circulars", apiStatus: "unavailable", icon: "R", category: "Financial", acceptedFormats: ["JSON", "PDF"],
     sampleFields: ["circular_type", "acknowledged", "deadline"] },
-  { id: "sebi", name: "SEBI Updates", description: "Securities & Exchange Board – Compliance updates", apiStatus: "unavailable", icon: "S", category: "Securities", acceptedFormats: ["JSON"],
+  { id: "sebi", name: "SEBI Updates", description: "Securities & Exchange Board – Compliance updates", apiStatus: "unavailable", icon: "S", category: "Securities", acceptedFormats: ["JSON", "PDF"],
     sampleFields: ["impact_level", "actioned", "deadline_relevant", "deadline"] },
-  { id: "incometax", name: "Income Tax Portal", description: "Income Tax Department – ITR, TDS, 26AS", apiStatus: "restricted", icon: "I", category: "Tax", acceptedFormats: ["JSON", "CSV"],
+  { id: "incometax", name: "Income Tax Portal", description: "Income Tax Department – ITR, TDS, 26AS", apiStatus: "restricted", icon: "I", category: "Tax", acceptedFormats: ["JSON", "CSV", "PDF"],
     sampleFields: ["tds_claimed", "tds_26as", "return_filing_date", "deadline", "advance_tax_paid", "advance_tax_due"] },
 ];
 

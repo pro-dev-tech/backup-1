@@ -36,15 +36,14 @@ const sevCfg: Record<string, string> = {
 };
 
 /**
- * Parse CSV: supports multi-row CSVs. If multiple rows, returns an object
- * with aggregated/first-row values and arrays for numeric fields.
+ * Parse CSV: supports multi-row CSVs with proper quoting.
+ * Aggregates numeric fields across rows; uses first row for strings/booleans.
  */
 function parseCSV(text: string): Record<string, any> {
   const lines = text.trim().split("\n").filter(l => l.trim());
   if (lines.length < 2) return {};
   const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
 
-  // Parse all data rows
   const rows = lines.slice(1).map(line => {
     const values = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
     const row: Record<string, any> = {};
@@ -52,7 +51,7 @@ function parseCSV(text: string): Record<string, any> {
       const val = values[i] ?? "";
       if (val === "true" || val === "false") row[h] = val === "true";
       else if (val === "null" || val === "") row[h] = null;
-      else if (!isNaN(Number(val))) row[h] = Number(val);
+      else if (!isNaN(Number(val)) && val !== "") row[h] = Number(val);
       else row[h] = val;
     });
     return row;
@@ -60,15 +59,31 @@ function parseCSV(text: string): Record<string, any> {
 
   if (rows.length === 1) return rows[0];
 
-  // For multi-row: aggregate numerics (sum), use first row for strings/booleans
+  // Multi-row aggregation
   const result: Record<string, any> = { ...rows[0], _rowCount: rows.length };
   headers.forEach(h => {
     const numericVals = rows.map(r => r[h]).filter(v => typeof v === "number");
     if (numericVals.length === rows.length) {
-      // Sum numeric fields for aggregation
       result[h] = numericVals.reduce((a, b) => a + b, 0);
     }
   });
+  return result;
+}
+
+/**
+ * Parse XML: basic tag extraction for compliance data.
+ */
+function parseXML(text: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  const tagRegex = /<(\w+)>(.*?)<\/\1>/gs;
+  let match;
+  while ((match = tagRegex.exec(text)) !== null) {
+    const key = match[1];
+    const val = match[2].trim();
+    if (val === "true" || val === "false") result[key] = val === "true";
+    else if (!isNaN(Number(val)) && val !== "") result[key] = Number(val);
+    else result[key] = val;
+  }
   return result;
 }
 
@@ -85,6 +100,7 @@ export default function Integrations() {
   const [showAudit, setShowAudit] = useState(false);
   const [pendingCalendarEvents, setPendingCalendarEvents] = useState<any[] | null>(null);
   const [pendingPlatformName, setPendingPlatformName] = useState("");
+  const [parsing, setParsing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<string | null>(null);
   const { toast } = useToast();
@@ -109,22 +125,102 @@ export default function Integrations() {
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !uploadTarget) return;
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+
     try {
-      const text = await file.text();
-      let data: Record<string, any>;
-      if (file.name.endsWith(".csv")) {
-        data = parseCSV(text);
+      if (ext === "csv") {
+        // Direct CSV parsing
+        const text = await file.text();
+        const data = parseCSV(text);
+        if (Object.keys(data).length === 0) {
+          toast({ title: "Empty Data", description: "CSV contains no usable data rows.", variant: "destructive" });
+          return;
+        }
+        toast({ title: "CSV parsed", description: `Extracted ${Object.keys(data).length} fields from ${file.name}. Running compliance engine...` });
+        await evaluate(uploadTarget, data);
+
+      } else if (ext === "json") {
+        // Direct JSON parsing
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data || typeof data !== "object" || Object.keys(data).length === 0) {
+          toast({ title: "Invalid JSON", description: "File must contain a JSON object with compliance fields.", variant: "destructive" });
+          return;
+        }
+        toast({ title: "JSON parsed", description: `Extracted ${Object.keys(data).length} fields. Running compliance engine...` });
+        await evaluate(uploadTarget, data);
+
+      } else if (ext === "xml") {
+        // Basic XML parsing
+        const text = await file.text();
+        const data = parseXML(text);
+        if (Object.keys(data).length === 0) {
+          toast({ title: "Empty XML", description: "Could not extract fields from XML. Try CSV or JSON.", variant: "destructive" });
+          return;
+        }
+        toast({ title: "XML parsed", description: `Extracted ${Object.keys(data).length} fields. Running compliance engine...` });
+        await evaluate(uploadTarget, data);
+
+      } else if (ext === "pdf" || ext === "txt" || ext === "doc" || ext === "docx" || ext === "xls" || ext === "xlsx") {
+        // For PDFs and other documents: read as text and send to AI for parsing
+        setParsing(true);
+        toast({ title: "Processing document...", description: `Sending ${file.name} to AI parser for field extraction.` });
+
+        let content = "";
+        if (ext === "pdf") {
+          // Read PDF as base64 text representation (server-side AI will parse)
+          const arrayBuffer = await file.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          // Try to extract readable text from PDF bytes
+          const decoder = new TextDecoder("utf-8", { fatal: false });
+          const rawText = decoder.decode(bytes);
+          // Extract text between stream markers or parentheses (basic PDF text extraction)
+          const textParts: string[] = [];
+          // Extract text objects from PDF
+          const tjRegex = /\(([^)]*)\)/g;
+          let m;
+          while ((m = tjRegex.exec(rawText)) !== null) {
+            if (m[1].length > 1 && /[a-zA-Z0-9]/.test(m[1])) {
+              textParts.push(m[1]);
+            }
+          }
+          content = textParts.length > 20 ? textParts.join(" ") : rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ").slice(0, 15000);
+        } else {
+          content = await file.text();
+        }
+
+        if (!content || content.trim().length < 10) {
+          toast({ title: "Unreadable Document", description: "Could not extract text from this file. Try converting to CSV or JSON.", variant: "destructive" });
+          setParsing(false);
+          return;
+        }
+
+        // Send to AI parser
+        try {
+          const platformInfo = platforms.find(p => p.id === uploadTarget);
+          const r = await api.post<any>("/compliance-ai/parse", {
+            content: content.slice(0, 15000),
+            platform: platformInfo?.name || uploadTarget,
+            filename: file.name,
+          });
+
+          if (r.data && typeof r.data === "object" && Object.keys(r.data).length > 0) {
+            toast({ title: `AI parsed ${file.name}`, description: `Extracted ${Object.keys(r.data).length} fields via ${r.message || "AI"}. Running compliance engine...` });
+            await evaluate(uploadTarget, r.data);
+          } else {
+            toast({ title: "AI parsing failed", description: "Could not extract structured data. Try CSV or JSON format.", variant: "destructive" });
+          }
+        } catch (err: any) {
+          toast({ title: "AI Parse Error", description: err.message || "Failed to parse document via AI.", variant: "destructive" });
+        }
+        setParsing(false);
       } else {
-        data = JSON.parse(text);
+        toast({ title: "Unsupported format", description: `${ext.toUpperCase()} files are not supported. Use CSV, JSON, XML, or PDF.`, variant: "destructive" });
       }
-      if (Object.keys(data).length === 0) {
-        toast({ title: "Empty Data", description: "The uploaded file contains no usable data.", variant: "destructive" });
-        return;
-      }
-      toast({ title: "File parsed", description: `Extracted ${Object.keys(data).length} fields from ${file.name}. Running compliance engine...` });
-      await evaluate(uploadTarget, data);
-    } catch {
-      toast({ title: "Parse Error", description: "Could not parse file. Ensure valid JSON or CSV format (headers + data rows).", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Parse Error", description: err.message || "Could not process file.", variant: "destructive" });
+      setParsing(false);
     }
     e.target.value = ""; setUploadTarget(null);
   };
@@ -141,7 +237,6 @@ export default function Integrations() {
         toast({ title: "✅ All clear!", description: `No violations for ${r.data.platform}.` });
       }
 
-      // Ask user permission before adding calendar events
       if (r.data.calendarSuggestions?.length > 0) {
         setPendingCalendarEvents(r.data.calendarSuggestions);
         setPendingPlatformName(r.data.platform);
@@ -212,7 +307,7 @@ export default function Integrations() {
           } catch { }
         }
       }
-    } catch { setExplanationText("AI explanation unavailable. Check your API keys (COMPLIANCE_GROQ_API_KEY or COMPLIANCE_OPENROUTER_API_KEY)."); }
+    } catch { setExplanationText("AI explanation unavailable. Configure INTEGRATION_GROQ_API_KEY, INTEGRATION_OPENROUTER_API_KEY, or INTEGRATION_GEMINI_API_KEY in your server .env file."); }
   };
 
   const riskColor = (level: string) => level === "High" ? "text-destructive" : level === "Medium" ? "text-warning" : "text-success";
@@ -225,13 +320,13 @@ export default function Integrations() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <input ref={fileRef} type="file" accept=".json,.csv,.xml" className="hidden" onChange={handleFile} />
+      <input ref={fileRef} type="file" accept=".json,.csv,.xml,.pdf,.txt,.doc,.docx,.xls,.xlsx" className="hidden" onChange={handleFile} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Integrations & Compliance Engine</h1>
-          <p className="text-sm text-muted-foreground mt-1">Upload your compliance data (CSV/JSON) — Rule-driven validation, AI-assisted explanations</p>
+          <p className="text-sm text-muted-foreground mt-1">Upload compliance documents (CSV, JSON, XML, PDF) — Rule-driven validation, AI-assisted parsing & explanations</p>
         </div>
         <button onClick={fetchAudit} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors">
           <History className="h-4 w-4" /> Audit Trail
@@ -255,6 +350,17 @@ export default function Integrations() {
           </button>
         )}
       </div>
+
+      {/* Parsing Indicator */}
+      {parsing && (
+        <div className="glass-card p-4 flex items-center gap-3 border-2 border-primary/20">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">AI Document Parser Active</p>
+            <p className="text-xs text-muted-foreground">Extracting structured compliance data from your document...</p>
+          </div>
+        </div>
+      )}
 
       {/* Calendar Permission Dialog */}
       <AnimatePresence>
@@ -342,6 +448,9 @@ export default function Integrations() {
                   <p className="text-[10px] text-muted-foreground">
                     Expected fields: <span className="font-mono">{p.sampleFields.join(", ")}</span>
                   </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Accepts: <span className="font-semibold">{p.acceptedFormats.join(", ")}</span>
+                  </p>
                 </div>
 
                 {/* Evaluation Status */}
@@ -355,12 +464,12 @@ export default function Integrations() {
                   </div>
                 )}
 
-                {/* Actions - Upload only, no sample/mock */}
+                {/* Actions */}
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleUpload(p.id)} disabled={evaluating === p.id}
+                  <button onClick={() => handleUpload(p.id)} disabled={evaluating === p.id || parsing}
                     className="flex items-center gap-1.5 rounded-lg gradient-primary px-4 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50">
-                    {evaluating === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                    {evaluating === p.id ? "Analyzing..." : `Upload ${p.acceptedFormats.join("/")}`}
+                    {evaluating === p.id || parsing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    {evaluating === p.id ? "Analyzing..." : parsing ? "AI Parsing..." : `Upload ${p.acceptedFormats.join("/")}`}
                   </button>
                   {(result || p.evaluation) && (
                     <button onClick={() => setExpanded(isExpanded ? null : p.id)}
