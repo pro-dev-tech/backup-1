@@ -60,6 +60,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isAuthenticated) fetchScore();
   }, [isAuthenticated, location.pathname, fetchScore]);
+
+  useEffect(() => {
     if (!isAuthenticated) navigate("/login", { replace: true });
   }, [isAuthenticated, navigate]);
 
