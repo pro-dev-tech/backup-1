@@ -22,17 +22,6 @@ interface EvalResult {
   platform: string; platformId: string; calendarSuggestions: any[];
 }
 
-const sampleData: Record<string, Record<string, any>> = {
-  gstn: { tax_collected: 150000, tax_reported: 142000, filing_date: "2026-02-20", due_date: "2026-02-10", input_tax_credit: 80000, allowed_itc_threshold: 65000 },
-  mca21: { annual_return_filed: false, filing_date: null, statutory_deadline: "2025-12-31", director_kyc_expiry: "2025-06-30", incorporation_filing_missing: false },
-  epfo: { pf_deduction_percent: 10, employer_contribution: 5000, expected_contribution: 6000, deposit_date: "2026-02-20", due_date: "2026-02-15" },
-  tally: { gst_ledger_mapped: false, unclassified_transactions: 15, missing_tax_category: 8 },
-  zoho: { tax_collected: 100000, invoice_tax_total: 95000, duplicate_invoices: 3, invalid_gst_rates: 2 },
-  rbi: { circular_type: "mandatory", acknowledged: false, deadline: "2026-03-01" },
-  sebi: { impact_level: "High", actioned: false, deadline_relevant: true, deadline: "2026-02-28" },
-  incometax: { tds_claimed: 200000, tds_26as: 180000, return_filing_date: "2026-08-15", deadline: "2026-07-31", advance_tax_paid: 50000, advance_tax_due: 80000 },
-};
-
 const apiStatusCfg: Record<string, { label: string; cls: string }> = {
   available: { label: "API Available", cls: "bg-success/15 text-success border-success/30" },
   restricted: { label: "Restricted API", cls: "bg-warning/15 text-warning border-warning/30" },
@@ -46,18 +35,39 @@ const sevCfg: Record<string, string> = {
   Low: "border-border bg-muted/30",
 };
 
+/**
+ * Parse CSV: supports multi-row CSVs. If multiple rows, returns an object
+ * with aggregated/first-row values and arrays for numeric fields.
+ */
 function parseCSV(text: string): Record<string, any> {
-  const lines = text.trim().split("\n");
+  const lines = text.trim().split("\n").filter(l => l.trim());
   if (lines.length < 2) return {};
-  const headers = lines[0].split(",").map(h => h.trim());
-  const values = lines[1].split(",").map(v => v.trim());
-  const result: Record<string, any> = {};
-  headers.forEach((h, i) => {
-    const val = values[i];
-    if (val === "true" || val === "false") result[h] = val === "true";
-    else if (!isNaN(Number(val)) && val !== "") result[h] = Number(val);
-    else if (val === "null") result[h] = null;
-    else result[h] = val;
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+
+  // Parse all data rows
+  const rows = lines.slice(1).map(line => {
+    const values = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
+    const row: Record<string, any> = {};
+    headers.forEach((h, i) => {
+      const val = values[i] ?? "";
+      if (val === "true" || val === "false") row[h] = val === "true";
+      else if (val === "null" || val === "") row[h] = null;
+      else if (!isNaN(Number(val))) row[h] = Number(val);
+      else row[h] = val;
+    });
+    return row;
+  });
+
+  if (rows.length === 1) return rows[0];
+
+  // For multi-row: aggregate numerics (sum), use first row for strings/booleans
+  const result: Record<string, any> = { ...rows[0], _rowCount: rows.length };
+  headers.forEach(h => {
+    const numericVals = rows.map(r => r[h]).filter(v => typeof v === "number");
+    if (numericVals.length === rows.length) {
+      // Sum numeric fields for aggregation
+      result[h] = numericVals.reduce((a, b) => a + b, 0);
+    }
   });
   return result;
 }
@@ -73,6 +83,8 @@ export default function Integrations() {
   const [explanationText, setExplanationText] = useState("");
   const [auditTrail, setAuditTrail] = useState<any[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [pendingCalendarEvents, setPendingCalendarEvents] = useState<any[] | null>(null);
+  const [pendingPlatformName, setPendingPlatformName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<string | null>(null);
   const { toast } = useToast();
@@ -99,9 +111,21 @@ export default function Integrations() {
     if (!file || !uploadTarget) return;
     try {
       const text = await file.text();
-      const data = file.name.endsWith(".csv") ? parseCSV(text) : JSON.parse(text);
+      let data: Record<string, any>;
+      if (file.name.endsWith(".csv")) {
+        data = parseCSV(text);
+      } else {
+        data = JSON.parse(text);
+      }
+      if (Object.keys(data).length === 0) {
+        toast({ title: "Empty Data", description: "The uploaded file contains no usable data.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "File parsed", description: `Extracted ${Object.keys(data).length} fields from ${file.name}. Running compliance engine...` });
       await evaluate(uploadTarget, data);
-    } catch { toast({ title: "Parse Error", description: "Invalid JSON or CSV file.", variant: "destructive" }); }
+    } catch {
+      toast({ title: "Parse Error", description: "Could not parse file. Ensure valid JSON or CSV format (headers + data rows).", variant: "destructive" });
+    }
     e.target.value = ""; setUploadTarget(null);
   };
 
@@ -114,27 +138,35 @@ export default function Integrations() {
       if (r.data.violations.length > 0) {
         toast({ title: `⚠️ ${r.data.violations.length} violation(s) found`, description: `Risk: ${r.data.riskLevel} | ${r.data.platform}`, variant: "destructive" });
       } else {
-        toast({ title: "✅ All clear!", description: `No violations for ${r.data.platform}.`, variant: "success" });
+        toast({ title: "✅ All clear!", description: `No violations for ${r.data.platform}.` });
       }
+
+      // Ask user permission before adding calendar events
       if (r.data.calendarSuggestions?.length > 0) {
-        setTimeout(() => {
-          toast({
-            title: "📅 Add compliance deadlines?",
-            description: `${r.data.calendarSuggestions.length} deadline(s) available for your calendar.`,
-          });
-          addToCalendar(r.data.calendarSuggestions);
-        }, 1500);
+        setPendingCalendarEvents(r.data.calendarSuggestions);
+        setPendingPlatformName(r.data.platform);
       }
     } catch (err: any) {
       toast({ title: "Evaluation failed", description: err.message, variant: "destructive" });
     } finally { setEvaluating(null); }
   };
 
-  const addToCalendar = async (events: any[]) => {
+  const confirmAddCalendar = async () => {
+    if (!pendingCalendarEvents) return;
     try {
-      const r = await api.post<{ added: number }>("/integrations/calendar-add", { events });
-      toast({ title: "Calendar updated", description: `${r.data.added} event(s) added.`, variant: "success" });
-    } catch { }
+      const r = await api.post<{ added: number }>("/integrations/calendar-add", { events: pendingCalendarEvents });
+      toast({ title: "📅 Calendar updated", description: `${r.data.added} deadline(s) added to your compliance calendar.` });
+    } catch {
+      toast({ title: "Failed to update calendar", variant: "destructive" });
+    }
+    setPendingCalendarEvents(null);
+    setPendingPlatformName("");
+  };
+
+  const declineCalendar = () => {
+    setPendingCalendarEvents(null);
+    setPendingPlatformName("");
+    toast({ title: "Calendar update skipped", description: "Deadlines were not added to your calendar." });
   };
 
   const explainViolation = async (v: Violation) => {
@@ -199,7 +231,7 @@ export default function Integrations() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Integrations & Compliance Engine</h1>
-          <p className="text-sm text-muted-foreground mt-1">Rule-driven compliance validation — AI-assisted, legally defensible</p>
+          <p className="text-sm text-muted-foreground mt-1">Upload your compliance data (CSV/JSON) — Rule-driven validation, AI-assisted explanations</p>
         </div>
         <button onClick={fetchAudit} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors">
           <History className="h-4 w-4" /> Audit Trail
@@ -223,6 +255,47 @@ export default function Integrations() {
           </button>
         )}
       </div>
+
+      {/* Calendar Permission Dialog */}
+      <AnimatePresence>
+        {pendingCalendarEvents && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="glass-card p-5 border-2 border-primary/30">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-foreground">Add compliance deadlines to your calendar?</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {pendingCalendarEvents.length} deadline(s) detected for <strong>{pendingPlatformName}</strong>. 
+                  These will be added to your Compliance Calendar and Dashboard.
+                </p>
+                <div className="mt-2 space-y-1">
+                  {pendingCalendarEvents.slice(0, 5).map((ev, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">
+                      • {ev.title} — {ev.day}/{ev.month + 1}/{ev.year}
+                    </p>
+                  ))}
+                  {pendingCalendarEvents.length > 5 && (
+                    <p className="text-xs text-muted-foreground">...and {pendingCalendarEvents.length - 5} more</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <button onClick={confirmAddCalendar}
+                    className="flex items-center gap-1.5 rounded-lg gradient-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+                    <CheckCircle className="h-3.5 w-3.5" /> Yes, update calendar
+                  </button>
+                  <button onClick={declineCalendar}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary transition-colors">
+                    <X className="h-3.5 w-3.5" /> No, skip
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* AI Explanation Panel */}
       <AnimatePresence>
@@ -264,6 +337,13 @@ export default function Integrations() {
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>{status.label}</span>
                 </div>
 
+                {/* Accepted fields hint */}
+                <div className="mb-3">
+                  <p className="text-[10px] text-muted-foreground">
+                    Expected fields: <span className="font-mono">{p.sampleFields.join(", ")}</span>
+                  </p>
+                </div>
+
                 {/* Evaluation Status */}
                 {p.evaluation && (
                   <div className="flex items-center gap-3 mb-3 text-xs">
@@ -275,17 +355,12 @@ export default function Integrations() {
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions - Upload only, no sample/mock */}
                 <div className="flex items-center gap-2">
                   <button onClick={() => handleUpload(p.id)} disabled={evaluating === p.id}
-                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors disabled:opacity-50">
+                    className="flex items-center gap-1.5 rounded-lg gradient-primary px-4 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50">
                     {evaluating === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                    Upload {p.acceptedFormats.join("/")}
-                  </button>
-                  <button onClick={() => evaluate(p.id, sampleData[p.id])} disabled={evaluating === p.id}
-                    className="flex items-center gap-1.5 rounded-lg gradient-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-                    {evaluating === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Scale className="h-3 w-3" />}
-                    Run Sample Analysis
+                    {evaluating === p.id ? "Analyzing..." : `Upload ${p.acceptedFormats.join("/")}`}
                   </button>
                   {(result || p.evaluation) && (
                     <button onClick={() => setExpanded(isExpanded ? null : p.id)}
@@ -353,7 +428,7 @@ export default function Integrations() {
               </div>
               <div className="overflow-y-auto space-y-2 flex-1 scrollbar-thin">
                 {auditTrail.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No audit entries yet. Run an evaluation to generate entries.</p>
+                  <p className="text-sm text-muted-foreground">No audit entries yet. Upload compliance data to generate entries.</p>
                 ) : auditTrail.map((a, i) => (
                   <div key={i} className="rounded-lg bg-secondary/50 p-3 text-xs">
                     <div className="flex items-center justify-between mb-1">

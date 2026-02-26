@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import ComplianceScore from "@/components/ComplianceScore";
 import { RiskTrendChart, FilingStatusChart, StateComplianceChart, MonthlyActivityChart } from "@/components/DashboardCharts";
 import { DeadlineCards, RiskAlerts, ActivityTimeline } from "@/components/DashboardWidgets";
-import { Users, FileText, ShieldCheck, AlertTriangle, ClipboardList, ArrowRight, Newspaper, Sparkles, Loader2, X } from "lucide-react";
+import { Users, FileText, ShieldCheck, AlertTriangle, ClipboardList, ArrowRight, Newspaper, Sparkles, Loader2, X, Plug } from "lucide-react";
 import { api } from "@/lib/api";
 import { renderMarkdown } from "@/lib/markdown";
 
@@ -27,11 +27,17 @@ export default function Dashboard() {
   const score = dashData?.hasEvaluations ? dashData.complianceScore : 0;
   const hasData = dashData?.hasEvaluations || false;
 
-  const stats = dashData?.stats || [
-    { label: "Total Compliances", value: "—", icon: "FileText", change: "" },
-    { label: "Active Employees", value: "—", icon: "Users", change: "" },
-    { label: "Compliant", value: "—", icon: "ShieldCheck", change: "" },
-    { label: "Pending Actions", value: "—", icon: "AlertTriangle", change: "" },
+  // Dynamic stats derived from real evaluation data
+  const stats = hasData ? [
+    { label: "Evaluated Platforms", value: String(dashData.evaluatedPlatforms || 0), icon: "FileText", change: "platforms analyzed" },
+    { label: "Total Violations", value: String(dashData.totalViolations || 0), icon: "AlertTriangle", change: hasData ? `${dashData.totalViolations > 0 ? "action needed" : "all clear"}` : "" },
+    { label: "Compliance Score", value: `${score}%`, icon: "ShieldCheck", change: score >= 80 ? "healthy" : score >= 50 ? "needs attention" : "critical" },
+    { label: "Triggered Rules", value: String(dashData.triggeredRules?.length || 0), icon: "Users", change: "rules flagged" },
+  ] : [
+    { label: "Evaluated Platforms", value: "0", icon: "FileText", change: "no data yet" },
+    { label: "Total Violations", value: "—", icon: "AlertTriangle", change: "" },
+    { label: "Compliance Score", value: "—", icon: "ShieldCheck", change: "" },
+    { label: "Triggered Rules", value: "—", icon: "Users", change: "" },
   ];
 
   const iconMap: Record<string, React.ElementType> = { FileText, Users, ShieldCheck, AlertTriangle };
@@ -73,12 +79,14 @@ export default function Dashboard() {
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       <motion.div variants={item}>
         <h1 className="text-2xl font-bold text-foreground">Compliance Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time overview of your regulatory compliance status</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {hasData ? "Live compliance status based on your uploaded data" : "Upload compliance data in Integrations to see live metrics"}
+        </p>
       </motion.div>
 
       {/* Stats */}
       <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s: any, i: number) => {
+        {stats.map((s, i) => {
           const Icon = iconMap[s.icon] || FileText;
           return (
             <div key={i} className="glass-card-hover p-4 flex items-center gap-4">
@@ -88,7 +96,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-2xl font-bold text-foreground">{s.value}</p>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="text-[10px] text-primary mt-0.5">{s.change}</p>
+                {s.change && <p className="text-[10px] text-primary mt-0.5">{s.change}</p>}
               </div>
             </div>
           );
@@ -107,7 +115,9 @@ export default function Dashboard() {
             </button>
           )}
           {!hasData && (
-            <Link to="/integrations" className="text-xs text-primary hover:underline">Run integrations to calculate →</Link>
+            <Link to="/integrations" className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+              <Plug className="h-3 w-3" /> Go to Integrations →
+            </Link>
           )}
         </div>
         <div className="lg:col-span-5"><DeadlineCards /></div>
@@ -133,7 +143,7 @@ export default function Dashboard() {
         <motion.div variants={item} className="glass-card p-5">
           <h3 className="text-sm font-semibold text-foreground mb-3">Triggered Compliance Rules</h3>
           <div className="space-y-2">
-            {dashData.triggeredRules.slice(0, 5).map((r: any, i: number) => (
+            {dashData.triggeredRules.map((r: any, i: number) => (
               <div key={i} className={`flex items-center gap-3 rounded-lg border p-3 ${r.severity === "High" ? "border-destructive/30 bg-destructive/5" : r.severity === "Medium" ? "border-warning/30 bg-warning/5" : "border-border bg-secondary/30"}`}>
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${r.severity === "High" ? "text-destructive" : r.severity === "Medium" ? "text-warning" : "text-muted-foreground"}`} />
                 <div className="flex-1 min-w-0">
@@ -156,6 +166,19 @@ export default function Dashboard() {
       </motion.div>
 
       {/* CTAs */}
+      <motion.div variants={item}>
+        <Link to="/integrations" className="glass-card-hover p-5 flex items-center gap-4 group block">
+          <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center shrink-0">
+            <Plug className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-foreground">Integrations & Compliance Engine</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Upload your compliance data to run the rule engine and update your score dynamically</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+        </Link>
+      </motion.div>
+
       <motion.div variants={item}>
         <Link to="/compliance-checker" className="glass-card-hover p-5 flex items-center gap-4 group block">
           <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center shrink-0">
