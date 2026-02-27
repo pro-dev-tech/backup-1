@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
-import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { getChatMessages, addChatMessage, clearChatMessages } from "@/lib/firestore";
 
 export interface Message {
   role: "user" | "ai";
@@ -27,22 +28,35 @@ const initialMessages: Message[] = [
   },
 ];
 
+// Express AI server URL – change this to your deployed Express server URL
+const AI_SERVER_URL = import.meta.env.VITE_AI_SERVER_URL || "http://localhost:5000";
+
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const { firebaseUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [isTyping, setIsTyping] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const streamingTextRef = useRef("");
 
+  // Load chat history from Firestore
   useEffect(() => {
-    api.get<Message[]>("/ai/history")
-      .then(res => {
-        setBackendAvailable(true);
-        if (res.success && res.data && res.data.length > 0) {
-          setMessages(res.data.map(m => ({ role: m.role, content: m.content, risks: m.risks, actions: m.actions })));
+    if (!firebaseUser) {
+      setMessages(initialMessages);
+      return;
+    }
+    getChatMessages(firebaseUser.uid)
+      .then(docs => {
+        if (docs.length > 0) {
+          setMessages(docs.map((d: any) => ({
+            role: d.role,
+            content: d.content,
+            risks: d.risks,
+            actions: d.actions,
+          })));
         }
       })
-      .catch(() => setBackendAvailable(false));
-  }, []);
+      .catch(() => {});
+  }, [firebaseUser]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isTyping) return;
@@ -52,14 +66,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(true);
     streamingTextRef.current = "";
 
+    // Save user message to Firestore
+    if (firebaseUser) {
+      addChatMessage(firebaseUser.uid, { role: "user", content: text }).catch(() => {});
+    }
+
     try {
-      const token = localStorage.getItem("cai_auth_token");
-      const response = await fetch("/api/ai/stream", {
+      const response = await fetch(`${AI_SERVER_URL}/api/ai/stream`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: text }),
       });
 
@@ -68,7 +83,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Stream not available");
       }
 
-      // Add empty streaming AI message
       setMessages(prev => [...prev, { role: "ai", content: "", isStreaming: true }]);
 
       const reader = response.body.getReader();
@@ -94,12 +108,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 const updated = [...prev];
                 for (let i = updated.length - 1; i >= 0; i--) {
                   if (updated[i].isStreaming) {
-                    updated[i] = {
-                      ...updated[i],
-                      content: `⚠️ **AI service is currently unavailable.**\n\n${parsed.error}`,
-                      isStreaming: false,
-                      isError: true,
-                    };
+                    updated[i] = { ...updated[i], content: `⚠️ **AI service unavailable.**\n\n${parsed.error}`, isStreaming: false, isError: true };
                     break;
                   }
                 }
@@ -140,42 +149,61 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Finalize any still-streaming message
-      setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m));
+      // Finalize streaming
+      setMessages(prev => {
+        const finalized = prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m);
+        // Save AI response to Firestore
+        const lastAi = finalized[finalized.length - 1];
+        if (lastAi?.role === "ai" && firebaseUser) {
+          addChatMessage(firebaseUser.uid, {
+            role: "ai",
+            content: lastAi.content,
+            risks: lastAi.risks || [],
+            actions: lastAi.actions || [],
+          }).catch(() => {});
+        }
+        return finalized;
+      });
       setBackendAvailable(true);
     } catch {
-      // Fallback to non-streaming
+      // Fallback: non-streaming
       try {
-        const res = await api.post<Message>("/ai/message", { content: text });
-        if (res.success && res.data) {
+        const res = await fetch(`${AI_SERVER_URL}/api/ai/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: text }),
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
           setBackendAvailable(true);
-          setMessages(prev => [...prev, {
-            role: "ai",
-            content: res.data.content,
-            risks: res.data.risks,
-            actions: res.data.actions,
-          }]);
+          const aiMsg: Message = { role: "ai", content: json.data.content, risks: json.data.risks, actions: json.data.actions };
+          setMessages(prev => [...prev, aiMsg]);
+          if (firebaseUser) {
+            addChatMessage(firebaseUser.uid, { role: "ai", content: json.data.content, risks: json.data.risks || [], actions: json.data.actions || [] }).catch(() => {});
+          }
         } else {
-          throw new Error(res.error || "No response");
+          throw new Error(json.error || "No response");
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
         setBackendAvailable(false);
         setMessages(prev => [...prev, {
           role: "ai",
-          content: `⚠️ **AI service is currently unavailable.**\n\n${errorMessage}\n\nPlease ensure the backend server is running:\n\`cd server && npm run dev\``,
+          content: `⚠️ **AI service unavailable.**\n\n${errorMessage}\n\nEnsure the Express server is running:\n\`cd server && npm run dev\``,
           isError: true,
         }]);
       }
     } finally {
       setIsTyping(false);
     }
-  }, [isTyping]);
+  }, [isTyping, firebaseUser]);
 
   const clearChat = useCallback(async () => {
     setMessages(initialMessages);
-    api.delete("/ai/history").catch(() => {});
-  }, []);
+    if (firebaseUser) {
+      clearChatMessages(firebaseUser.uid).catch(() => {});
+    }
+  }, [firebaseUser]);
 
   return (
     <ChatContext.Provider value={{ messages, sendMessage, clearChat, isTyping, backendAvailable }}>
