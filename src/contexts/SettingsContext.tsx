@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { getUserSettings, setUserSettings, getUserProfile, setUserProfile } from "@/lib/firestore";
 
 interface Profile {
   firstName: string;
@@ -38,24 +40,26 @@ interface SettingsContextType {
   accentPresets: AccentColor[];
   showFloatingAI: boolean;
   setShowFloatingAI: (show: boolean) => void;
+  saveProfile: () => void;
+  saveCompany: () => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
+const defaultProfile: Profile = { firstName: "", lastName: "", email: "", phone: "" };
+const defaultCompany: Company = { name: "", gstin: "", cin: "", state: "", employees: "0" };
+
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [profile, setProfile] = useState<Profile>({
-    firstName: "Rahul",
-    lastName: "Agarwal",
-    email: "rahul@acmepvt.com",
-    phone: "+91 98765 43210",
+  const { user, firebaseUser } = useAuth();
+
+  const [profile, setProfile] = useState<Profile>(() => {
+    if (user) return { firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone };
+    return defaultProfile;
   });
 
-  const [company, setCompany] = useState<Company>({
-    name: "Acme Pvt Ltd",
-    gstin: "27AABCU9603R1ZX",
-    cin: "U72200MH2020PTC123456",
-    state: "Maharashtra",
-    employees: "35",
+  const [company, setCompany] = useState<Company>(() => {
+    if (user?.company) return user.company;
+    return defaultCompany;
   });
 
   const [accentColor, setAccentColorState] = useState(() => {
@@ -64,38 +68,86 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const [showFloatingAI, setShowFloatingAIState] = useState(() => {
     const saved = localStorage.getItem("show-floating-ai");
-    return saved !== null ? saved === "true" : true; // default enabled
+    return saved !== null ? saved === "true" : true;
   });
 
-  const setAccentColor = useCallback((hsl: string) => {
-    setAccentColorState(hsl);
-    localStorage.setItem("accent-color", hsl);
+  // Sync profile/company from user when auth state changes
+  useEffect(() => {
+    if (user) {
+      setProfile({ firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone });
+      if (user.company) setCompany(user.company);
+    }
+  }, [user]);
+
+  // Load settings from Firestore
+  useEffect(() => {
+    if (!firebaseUser) return;
+    getUserSettings(firebaseUser.uid).then(settings => {
+      if (settings) {
+        if (settings.accentColor) {
+          setAccentColorState(settings.accentColor);
+          applyAccent(settings.accentColor);
+        }
+        if (settings.showFloatingAI !== undefined) setShowFloatingAIState(settings.showFloatingAI);
+      }
+    }).catch(() => {});
+  }, [firebaseUser]);
+
+  const applyAccent = (hsl: string) => {
     const root = document.documentElement;
     root.style.setProperty("--primary", hsl);
     root.style.setProperty("--ring", hsl);
     root.style.setProperty("--sidebar-primary", hsl);
     root.style.setProperty("--sidebar-ring", hsl);
-  }, []);
+  };
+
+  const setAccentColor = useCallback((hsl: string) => {
+    setAccentColorState(hsl);
+    localStorage.setItem("accent-color", hsl);
+    applyAccent(hsl);
+    if (firebaseUser) {
+      setUserSettings(firebaseUser.uid, { accentColor: hsl }).catch(() => {});
+    }
+  }, [firebaseUser]);
 
   const setShowFloatingAI = useCallback((show: boolean) => {
     setShowFloatingAIState(show);
     localStorage.setItem("show-floating-ai", String(show));
-  }, []);
+    if (firebaseUser) {
+      setUserSettings(firebaseUser.uid, { showFloatingAI: show }).catch(() => {});
+    }
+  }, [firebaseUser]);
+
+  const saveProfile = useCallback(() => {
+    if (firebaseUser) {
+      setUserProfile(firebaseUser.uid, {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        phone: profile.phone,
+      }).catch(() => {});
+    }
+  }, [firebaseUser, profile]);
+
+  const saveCompany = useCallback(() => {
+    if (firebaseUser) {
+      setUserProfile(firebaseUser.uid, { company }).catch(() => {});
+    }
+  }, [firebaseUser, company]);
 
   // Apply saved accent on mount
-  useState(() => {
+  useEffect(() => {
     const saved = localStorage.getItem("accent-color");
-    if (saved) {
-      const root = document.documentElement;
-      root.style.setProperty("--primary", saved);
-      root.style.setProperty("--ring", saved);
-      root.style.setProperty("--sidebar-primary", saved);
-      root.style.setProperty("--sidebar-ring", saved);
-    }
-  });
+    if (saved) applyAccent(saved);
+  }, []);
 
   return (
-    <SettingsContext.Provider value={{ profile, setProfile, company, setCompany, accentColor, setAccentColor, accentPresets, showFloatingAI, setShowFloatingAI }}>
+    <SettingsContext.Provider value={{
+      profile, setProfile, company, setCompany,
+      accentColor, setAccentColor, accentPresets,
+      showFloatingAI, setShowFloatingAI,
+      saveProfile, saveCompany,
+    }}>
       {children}
     </SettingsContext.Provider>
   );
@@ -103,6 +155,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
 export function useSettings() {
   const ctx = useContext(SettingsContext);
-  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
+  if (!ctx) throw new Error("useSettings must be used within SettingsContext");
   return ctx;
 }

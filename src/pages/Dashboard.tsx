@@ -5,34 +5,60 @@ import ComplianceScore from "@/components/ComplianceScore";
 import { RiskTrendChart, FilingStatusChart, StateComplianceChart, MonthlyActivityChart } from "@/components/DashboardCharts";
 import { DeadlineCards, RiskAlerts, ActivityTimeline } from "@/components/DashboardWidgets";
 import { Users, FileText, ShieldCheck, AlertTriangle, ClipboardList, ArrowRight, Newspaper, Sparkles, Loader2, X, Plug } from "lucide-react";
-import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { getComplianceScore, getEvaluations } from "@/lib/firestore";
 import { renderMarkdown } from "@/lib/markdown";
+
+const AI_SERVER_URL = import.meta.env.VITE_AI_SERVER_URL || "http://localhost:5000";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0 } };
 
 export default function Dashboard() {
-  const [dashData, setDashData] = useState<any>(null);
+  const { firebaseUser } = useAuth();
+  const [scoreData, setScoreData] = useState<any>(null);
+  const [triggeredRules, setTriggeredRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [explaining, setExplaining] = useState(false);
   const [explanationText, setExplanationText] = useState("");
 
   useEffect(() => {
-    api.get<any>("/dashboard")
-      .then(r => setDashData(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    if (!firebaseUser) return;
+    loadDashboard();
+  }, [firebaseUser]);
 
-  const score = dashData?.hasEvaluations ? dashData.complianceScore : 0;
-  const hasData = dashData?.hasEvaluations || false;
+  const loadDashboard = async () => {
+    if (!firebaseUser) return;
+    try {
+      const data = await getComplianceScore(firebaseUser.uid);
+      setScoreData(data);
 
-  // Dynamic stats derived from real evaluation data
+      // Extract triggered rules from evaluations
+      if (data.evals) {
+        const rules = data.evals.flatMap((e: any) =>
+          (e.violations || []).map((v: any) => ({
+            condition: v.description,
+            result: v.reason,
+            severity: v.severity,
+            ruleId: v.ruleId,
+            legalReference: v.legalReference,
+            platform: v.platform,
+          }))
+        );
+        setTriggeredRules(rules);
+      }
+    } catch { }
+    finally { setLoading(false); }
+  };
+
+  const score = scoreData?.hasData ? scoreData.score : 0;
+  const hasData = scoreData?.hasData || false;
+
   const stats = hasData ? [
-    { label: "Evaluated Platforms", value: String(dashData.evaluatedPlatforms || 0), icon: "FileText", change: "platforms analyzed" },
-    { label: "Total Violations", value: String(dashData.totalViolations || 0), icon: "AlertTriangle", change: hasData ? `${dashData.totalViolations > 0 ? "action needed" : "all clear"}` : "" },
+    { label: "Evaluated Platforms", value: String(scoreData.evaluatedPlatforms || 0), icon: "FileText", change: "platforms analyzed" },
+    { label: "Total Violations", value: String(scoreData.totalViolations || 0), icon: "AlertTriangle", change: scoreData.totalViolations > 0 ? "action needed" : "all clear" },
     { label: "Compliance Score", value: `${score}%`, icon: "ShieldCheck", change: score >= 80 ? "healthy" : score >= 50 ? "needs attention" : "critical" },
-    { label: "Triggered Rules", value: String(dashData.triggeredRules?.length || 0), icon: "Users", change: "rules flagged" },
+    { label: "Triggered Rules", value: String(triggeredRules.length), icon: "Users", change: "rules flagged" },
   ] : [
     { label: "Evaluated Platforms", value: "0", icon: "FileText", change: "no data yet" },
     { label: "Total Violations", value: "—", icon: "AlertTriangle", change: "" },
@@ -44,14 +70,13 @@ export default function Dashboard() {
 
   const explainScore = async () => {
     setExplaining(true); setExplanationText("");
-    const violations = (dashData?.triggeredRules || []).map((r: any) => `- [${r.severity}] ${r.ruleId}: ${r.condition} → ${r.result} (${r.legalReference})`).join("\n");
-    const context = `Explain this compliance score with proof:\n\nScore: ${score}/100\nEvaluated Platforms: ${dashData?.evaluatedPlatforms || 0}\nTriggered Rules:\n${violations || "None"}\n\nProvide: 1) Score breakdown 2) Impact of each violation 3) Improvement steps 4) Priority actions`;
+    const violations = triggeredRules.map((r: any) => `- [${r.severity}] ${r.ruleId}: ${r.condition} → ${r.result} (${r.legalReference})`).join("\n");
+    const context = `Explain this compliance score with proof:\n\nScore: ${score}/100\nEvaluated Platforms: ${scoreData?.evaluatedPlatforms || 0}\nTriggered Rules:\n${violations || "None"}\n\nProvide: 1) Score breakdown 2) Impact of each violation 3) Improvement steps 4) Priority actions`;
 
     try {
-      const token = localStorage.getItem("cai_auth_token");
-      const resp = await fetch("/api/compliance-ai/explain", {
+      const resp = await fetch(`${AI_SERVER_URL}/api/compliance-ai/explain`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context }),
       });
       if (!resp.ok || !resp.body) throw new Error("Stream failed");
@@ -72,8 +97,14 @@ export default function Dashboard() {
           try { const j = JSON.parse(p); if (j.word !== undefined) { fullText += j.word; setExplanationText(fullText); } } catch { }
         }
       }
-    } catch { setExplanationText("AI explanation unavailable. Configure COMPLIANCE_GROQ_API_KEY."); }
+    } catch { setExplanationText("AI explanation unavailable. Ensure the Express server is running with INTEGRATION_GROQ_API_KEY configured."); }
   };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
@@ -103,7 +134,7 @@ export default function Dashboard() {
         })}
       </motion.div>
 
-      {/* Score + AI Explain + Deadlines + Alerts */}
+      {/* Score + Deadlines + Alerts */}
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <div className="lg:col-span-3 glass-card p-5 flex flex-col items-center justify-center gap-3">
           <ComplianceScore score={score} label={hasData ? "Rule-Based Score" : "No Evaluations Yet"} />
@@ -139,11 +170,11 @@ export default function Dashboard() {
       )}
 
       {/* Triggered Rules */}
-      {dashData?.triggeredRules?.length > 0 && (
+      {triggeredRules.length > 0 && (
         <motion.div variants={item} className="glass-card p-5">
           <h3 className="text-sm font-semibold text-foreground mb-3">Triggered Compliance Rules</h3>
           <div className="space-y-2">
-            {dashData.triggeredRules.map((r: any, i: number) => (
+            {triggeredRules.map((r: any, i: number) => (
               <div key={i} className={`flex items-center gap-3 rounded-lg border p-3 ${r.severity === "High" ? "border-destructive/30 bg-destructive/5" : r.severity === "Medium" ? "border-warning/30 bg-warning/5" : "border-border bg-secondary/30"}`}>
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${r.severity === "High" ? "text-destructive" : r.severity === "Medium" ? "text-warning" : "text-muted-foreground"}`} />
                 <div className="flex-1 min-w-0">

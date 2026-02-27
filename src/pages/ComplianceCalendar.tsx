@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Plus, X, Loader2, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { getCalendarEvents, addCalendarEvent, deleteCalendarEvent } from "@/lib/firestore";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -32,22 +33,20 @@ export default function ComplianceCalendar() {
   const [newTitle, setNewTitle] = useState("");
   const [newStatus, setNewStatus] = useState<CalEvent["status"]>("upcoming");
   const { toast } = useToast();
+  const { firebaseUser } = useAuth();
   const today = new Date();
 
-  // Fetch events from backend
   const fetchEvents = async () => {
+    if (!firebaseUser) return;
     setLoading(true);
     try {
-      const r = await api.get<CalEvent[]>("/calendar");
-      setEvents(r.data);
-    } catch {
-      // Backend may not be running
-    } finally {
-      setLoading(false);
-    }
+      const docs = await getCalendarEvents(firebaseUser.uid);
+      setEvents(docs as CalEvent[]);
+    } catch { }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => { fetchEvents(); }, [firebaseUser]);
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
@@ -81,28 +80,23 @@ export default function ComplianceCalendar() {
   };
 
   const handleAddEvent = async () => {
-    if (!newTitle.trim() || selectedDay === null) return;
+    if (!newTitle.trim() || selectedDay === null || !firebaseUser) return;
     try {
-      const r = await api.post<CalEvent>("/calendar", {
-        day: selectedDay,
-        month,
-        year,
-        title: newTitle.trim(),
-        status: newStatus,
-      });
-      setEvents(prev => [...prev, r.data]);
+      const eventData = { day: selectedDay, month, year, title: newTitle.trim(), status: newStatus };
+      const result = await addCalendarEvent(firebaseUser.uid, eventData);
+      setEvents(prev => [...prev, { ...eventData, id: result.id } as CalEvent]);
       setShowAddModal(false);
       setNewTitle("");
-      toast({ title: "Event added", description: `"${r.data.title}" on ${MONTH_NAMES[month]} ${selectedDay}, ${year}` });
+      toast({ title: "Event added", description: `"${eventData.title}" on ${MONTH_NAMES[month]} ${selectedDay}, ${year}` });
     } catch {
       toast({ title: "Failed to add event", variant: "destructive" });
     }
   };
 
   const handleDeleteEvent = async (event: CalEvent) => {
-    if (!event.id) return;
+    if (!event.id || !firebaseUser) return;
     try {
-      await api.delete(`/calendar/${event.id}`);
+      await deleteCalendarEvent(firebaseUser.uid, event.id);
       setEvents(prev => prev.filter(e => e.id !== event.id));
       toast({ title: "Event removed", variant: "destructive" });
     } catch {
@@ -145,7 +139,6 @@ export default function ComplianceCalendar() {
       ) : (
         <>
           <div className="glass-card p-6">
-            {/* Month header */}
             <div className="flex items-center justify-between mb-6">
               <button onClick={prevMonth} className="rounded-lg p-2 text-muted-foreground hover:bg-secondary transition-colors">
                 <ChevronLeft className="h-5 w-5" />
@@ -156,45 +149,31 @@ export default function ComplianceCalendar() {
               </button>
             </div>
 
-            {/* Day headers */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {DAYS.map((d) => (
                 <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
               ))}
             </div>
 
-            {/* Calendar grid */}
             <motion.div key={`${month}-${year}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-7 gap-1">
-              {blanks.map((i) => (
-                <div key={`b-${i}`} className="aspect-square" />
-              ))}
+              {blanks.map((i) => (<div key={`b-${i}`} className="aspect-square" />))}
               {days.map((day) => {
                 const dayEvents = getEvents(day);
                 const todayFlag = isToday(day);
                 return (
-                  <div
-                    key={day}
-                    onClick={() => openAddModal(day)}
-                    className={`aspect-square rounded-lg p-1.5 text-sm transition-colors cursor-pointer hover:bg-secondary/80 group ${
-                      todayFlag ? "border border-primary bg-primary/10" : "bg-secondary/30"
-                    }`}
-                  >
+                  <div key={day} onClick={() => openAddModal(day)}
+                    className={`aspect-square rounded-lg p-1.5 text-sm transition-colors cursor-pointer hover:bg-secondary/80 group ${todayFlag ? "border border-primary bg-primary/10" : "bg-secondary/30"}`}>
                     <div className="flex items-center justify-between">
                       <span className={`text-xs font-medium ${todayFlag ? "text-primary" : "text-foreground"}`}>{day}</span>
                       <Plus className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <div className="mt-0.5 space-y-0.5">
                       {dayEvents.map((ev, i) => (
-                        <div
-                          key={i}
-                          className={`rounded px-1 py-0.5 text-[9px] font-medium truncate ${
-                            ev.status === "completed" ? "bg-success/15 text-success" :
-                            ev.status === "overdue" ? "bg-destructive/15 text-destructive" :
-                            "bg-warning/15 text-warning"
-                          }`}
-                        >
-                          {ev.title}
-                        </div>
+                        <div key={i} className={`rounded px-1 py-0.5 text-[9px] font-medium truncate ${
+                          ev.status === "completed" ? "bg-success/15 text-success" :
+                          ev.status === "overdue" ? "bg-destructive/15 text-destructive" :
+                          "bg-warning/15 text-warning"
+                        }`}>{ev.title}</div>
                       ))}
                     </div>
                   </div>
@@ -203,14 +182,12 @@ export default function ComplianceCalendar() {
             </motion.div>
           </div>
 
-          {/* Info banner when no events */}
           {events.length === 0 && (
             <div className="glass-card p-5 text-center">
               <p className="text-sm text-muted-foreground">No calendar events yet. Run a compliance evaluation in <strong>Integrations</strong> and approve the calendar update to see deadlines here.</p>
             </div>
           )}
 
-          {/* Upcoming list */}
           <div className="glass-card p-5">
             <h3 className="text-sm font-semibold text-foreground mb-3">{MONTH_NAMES[month]} {year} Deadlines</h3>
             {monthEvents.length === 0 ? (
@@ -228,13 +205,12 @@ export default function ComplianceCalendar() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
-                        ev.status === "completed" ? "border-success/30 bg-success/10 text-success" : ev.status === "overdue" ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-warning/30 bg-warning/10 text-warning"
+                        ev.status === "completed" ? "border-success/30 bg-success/10 text-success" :
+                        ev.status === "overdue" ? "border-destructive/30 bg-destructive/10 text-destructive" :
+                        "border-warning/30 bg-warning/10 text-warning"
                       }`}>{ev.status}</span>
-                      <button
-                        onClick={() => handleDeleteEvent(ev)}
-                        className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Remove event"
-                      >
+                      <button onClick={() => handleDeleteEvent(ev)}
+                        className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Remove event">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -291,9 +267,7 @@ export default function ComplianceCalendar() {
                             : s === "overdue" ? "bg-destructive/20 text-destructive border border-destructive/30"
                             : "bg-warning/20 text-warning border border-warning/30"
                             : "border border-border text-muted-foreground hover:bg-secondary"
-                        }`}>
-                        {s}
-                      </button>
+                        }`}>{s}</button>
                     ))}
                   </div>
                 </div>
